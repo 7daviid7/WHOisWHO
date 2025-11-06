@@ -1,0 +1,19 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Copy app manifest and source
+COPY apps/web/package*.json ./apps/web/
+COPY apps/web ./apps/web
+
+WORKDIR /app/apps/web
+
+# Install deps (best-effort placeholder)
+RUN npm install --production=false || true
+
+# Build (best-effort placeholder)
+RUN npm run build || true
+
+EXPOSE 3000
+CMD ["npm", "run", "start"]
+

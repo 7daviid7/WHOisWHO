@@ -1,0 +1,30 @@
+# Defineix la versió de la sintaxi de Docker Compose
+version: "3.8"
+
+# Aquí comencen els nostres serveis (contenidors)
+services:
+  # 1. El servei de la Base de Dades
+  db:
+    # AQUESTA ÉS LA PART CLAU: defineix la imatge exacta
+    # Tothom al vostre equip descarregarà i executarà "redis:7-alpine"
+    image: "redis:7-alpine"
+
+    # Li donem un nom al contenidor per identificar-lo fàcilment
+    container_name: "projecte-whoiswho-redis"
+
+    # Mapeja els ports:
+    # "Port_Local : Port_Contenidor"
+    # Permet que la teva màquina local (p.ex. el teu backend) es connecti
+    # al port 6379, que es redirigirà al port 6379 dins del contenidor
+    ports:
+      - "6379:6379"
+
+    # Afegeix persistència de dades (IMPORTANT!)
+    # Si no afegim això, cada cop que atureu el contenidor, Redis perdria
+    # totes les dades. Amb això, les dades es guarden en un "volum".
+    volumes:
+      - redis_data:/data
+
+# Definició del volum que hem mencionat a dalt
+volumes:
+  redis_data:
