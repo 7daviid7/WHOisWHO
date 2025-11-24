@@ -1,0 +1,150 @@
+import express, { Request, Response } from 'express';
+import http from 'http';
+import { Server, Socket } from 'socket.io';
+import cors from 'cors';
+import dotenv from 'dotenv';
+import { connectRedis, createRoom, getRoom, addPlayerToRoom, updateRoom, setSecretCharacter, getSecretCharacter, deleteRoom, getAvailableRooms } from './services/redisService';
+import { characters } from './data/characters';
+import { GameState } from './types';
+
+dotenv.config();
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+const server = http.createServer(app);
+const io = new Server(server, {
+    cors: {
+        origin: "*",
+        methods: ["GET", "POST"]
+    }
+});
+
+// API Routes
+app.get('/api/characters', (req: Request, res: Response) => {
+    res.json(characters);
+});
+
+io.on('connection', (socket: Socket) => {
+    console.log('User connected:', socket.id);
+
+    socket.on('get_rooms', async () => {
+        const rooms = await getAvailableRooms();
+        socket.emit('rooms_list', rooms);
+    });
+
+    socket.on('join_room', async ({ roomId, username }: { roomId: string, username: string }) => {
+        let room = await getRoom(roomId);
+        if (!room) {
+            room = await createRoom(roomId);
+        }
+
+        if (room.players.length >= 2) {
+            // Check if player is already in room (reconnection)
+            const existingPlayer = room.players.find(p => p.id === socket.id);
+            if (!existingPlayer) {
+                socket.emit('error', 'La sala està plena');
+                return;
+            }
+        } else {
+            // Check if player is already in room to avoid duplicates on re-joins
+            const existingPlayer = room.players.find(p => p.id === socket.id);
+            if (!existingPlayer) {
+                const newPlayer = { id: socket.id, name: username };
+                const updatedRoom = await addPlayerToRoom(roomId, newPlayer);
+                if (updatedRoom) room = updatedRoom;
+            }
+        }
+
+        socket.join(roomId);
+        io.to(roomId).emit('room_update', room);
+        
+        // Broadcast updated room list to everyone in lobby
+        const availableRooms = await getAvailableRooms();
+        io.emit('rooms_list', availableRooms);
+
+        if (room && room.players.length === 2 && room.status === 'waiting') {
+            // Start Game
+            room.status = 'playing';
+            room.turn = room.players[0].id; // Player 1 starts
+            
+            // Assign secret characters
+            const char1 = characters[Math.floor(Math.random() * characters.length)];
+            let char2 = characters[Math.floor(Math.random() * characters.length)];
+            while (char1.id === char2.id) {
+                char2 = characters[Math.floor(Math.random() * characters.length)];
+            }
+
+            await setSecretCharacter(roomId, room.players[0].id, char1.id);
+            await setSecretCharacter(roomId, room.players[1].id, char2.id);
+            await updateRoom(roomId, room);
+
+            io.to(room.players[0].id).emit('secret_character', char1);
+            io.to(room.players[1].id).emit('secret_character', char2);
+            io.to(roomId).emit('game_started', room);
+        }
+    });
+
+    socket.on('ask_question', async ({ roomId, question, attribute, value }: { roomId: string, question: string, attribute: string, value: any }) => {
+        const room = await getRoom(roomId);
+        if (room && room.turn === socket.id) {
+            socket.to(roomId).emit('receive_question', { question, attribute, value });
+        }
+    });
+
+    socket.on('answer_question', async ({ roomId, answer, attribute, value }: { roomId: string, answer: boolean, attribute: string, value: any }) => {
+        // answer is boolean (yes/no)
+        // Broadcast answer so the asker can update their board
+        io.to(roomId).emit('receive_answer', { answer, attribute, value, from: socket.id });
+        
+        // Switch turn
+        const room = await getRoom(roomId);
+        if (room) {
+            const otherPlayer = room.players.find(p => p.id !== socket.id);
+            if (otherPlayer) {
+                room.turn = socket.id; // The one who answered (socket.id) now gets the turn
+                await updateRoom(roomId, room);
+                io.to(roomId).emit('room_update', room);
+            }
+        }
+    });
+
+    socket.on('guess_character', async ({ roomId, characterId }: { roomId: string, characterId: number }) => {
+        const room = await getRoom(roomId);
+        if (!room) return;
+
+        const opponent = room.players.find(p => p.id !== socket.id);
+        if (!opponent) return;
+
+        const opponentSecretId = await getSecretCharacter(roomId, opponent.id);
+        
+        if (opponentSecretId === characterId) {
+            // Win
+            room.status = 'finished';
+            room.winner = socket.id;
+            await updateRoom(roomId, room);
+            io.to(roomId).emit('game_over', { winner: socket.id, reason: 'Encertat' });
+        } else {
+            // Lose (Incorrect guess)
+            room.status = 'finished';
+            room.winner = opponent.id;
+            await updateRoom(roomId, room);
+            io.to(roomId).emit('game_over', { winner: opponent.id, reason: 'Incorrecte' });
+        }
+    });
+
+    socket.on('disconnect', () => {
+        console.log('User disconnected:', socket.id);
+        // Handle disconnection logic (pause game, declare winner, etc.)
+        // For simplicity, we might just leave it or clean up empty rooms
+    });
+});
+
+const PORT = process.env.PORT || 3000;
+
+connectRedis().then(() => {
+    server.listen(PORT, () => {
+        console.log(`Server running on port ${PORT}`);
+    });
+});
