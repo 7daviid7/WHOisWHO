@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { socket } from './socket';
 import { Login } from './components/Login';
 import { RoomBrowser } from './components/RoomBrowser';
@@ -175,7 +175,17 @@ function App() {
   const opponentName = opponent?.name || 'Rival';
 
   return (
-    <div style={{ padding: '20px', fontFamily: 'Arial', backgroundColor: '#f4f6f7', minHeight: '100vh' }}>
+    <div style={{ 
+        padding: '10px', 
+        fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif", 
+        background: 'linear-gradient(to bottom, #ecf0f1 0%, #bdc3c7 100%)', 
+        minHeight: '100vh',
+        maxHeight: '100vh',
+        overflow: 'hidden',
+        backgroundAttachment: 'fixed',
+        display: 'flex',
+        flexDirection: 'column'
+    }}>
       {gameState.status === 'finished' && (
           <GameOverModal 
             winner={gameState.winner === socket.id ? username : opponentName} 
@@ -185,154 +195,381 @@ function App() {
           />
       )}
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
-        <div>
-            <h2 style={{ color: '#2c3e50' }}>Sala: {gameState.roomId}</h2>
-            <h3 style={{ color: '#7f8c8d', marginTop: '5px' }}>Rival: {opponentName}</h3>
-            <p style={{ fontSize: '1.2rem', fontWeight: 'bold', color: isMyTurn ? '#27ae60' : '#c0392b' }}>
-                {isMyTurn ? "EL TEU TORN" : "TORN DEL RIVAL"}
-            </p>
-        </div>
-        <div style={{ 
-            width: '300px', 
-            height: '150px', 
-            overflowY: 'scroll', 
-            border: '1px solid #bdc3c7', 
-            padding: '10px',
-            backgroundColor: 'white',
-            borderRadius: '5px'
-        }}>
-            <h4 style={{ marginTop: 0, color: '#7f8c8d' }}>Registre</h4>
-            {logs.map((l, i) => <div key={i} style={{ fontSize: '0.9rem', marginBottom: '5px' }}>{l}</div>)}
-        </div>
+      {/* Header Section - Compact */}
+      <div style={{ 
+          background: 'linear-gradient(135deg, #2c3e50 0%, #34495e 100%)',
+          padding: '10px 15px',
+          borderRadius: '10px',
+          marginBottom: '10px',
+          boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
+          border: '2px solid rgba(255,255,255,0.1)',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '15px'
+      }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+              <div>
+                  <h2 style={{ 
+                      color: '#FFD700',
+                      margin: 0,
+                      fontSize: '1.2rem',
+                      textShadow: '1px 1px 2px rgba(0,0,0,0.3)'
+                  }}>
+                      🎮 {gameState.roomId}
+                  </h2>
+                  <h3 style={{ 
+                      color: '#ecf0f1', 
+                      margin: '3px 0 0 0',
+                      fontSize: '0.9rem'
+                  }}>
+                      {username} vs {opponentName}
+                  </h3>
+              </div>
+              
+              <div style={{
+                  padding: '8px 15px',
+                  backgroundColor: isMyTurn ? '#27ae60' : '#e74c3c',
+                  borderRadius: '8px',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                  animation: isMyTurn ? 'pulse 2s infinite' : 'none'
+              }}>
+                  <p style={{ 
+                      fontSize: '1rem', 
+                      fontWeight: 'bold', 
+                      color: 'white',
+                      margin: 0,
+                      textShadow: '1px 1px 2px rgba(0,0,0,0.3)'
+                  }}>
+                      {isMyTurn ? "⏰ EL TEU TORN" : "⌛ TORN RIVAL"}
+                  </p>
+              </div>
+          </div>
+          
+          {/* Game Log - Compact */}
+          <div style={{ 
+              width: '280px', 
+              backgroundColor: 'white',
+              borderRadius: '8px',
+              boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
+              overflow: 'hidden',
+              border: '2px solid #FFD700'
+          }}>
+              <div style={{
+                  backgroundColor: '#FFD700',
+                  padding: '6px 10px',
+                  borderBottom: '1px solid #DAA520'
+              }}>
+                  <h4 style={{ 
+                      margin: 0, 
+                      color: '#2c3e50',
+                      fontWeight: 'bold',
+                      fontSize: '0.85rem'
+                  }}>
+                      📋 Registre
+                  </h4>
+              </div>
+              <div style={{ 
+                  height: '80px', 
+                  overflowY: 'auto', 
+                  padding: '8px',
+              }}>
+                  {logs.length === 0 ? (
+                      <p style={{ color: '#95a5a6', textAlign: 'center', margin: '10px 0', fontSize: '0.8rem' }}>
+                          No hi ha jugades...
+                      </p>
+                  ) : (
+                      logs.map((l, i) => (
+                          <div key={i} style={{ 
+                              fontSize: '0.75rem', 
+                              marginBottom: '5px',
+                              padding: '5px',
+                              backgroundColor: i % 2 === 0 ? '#f8f9fa' : 'white',
+                              borderRadius: '4px',
+                              borderLeft: '2px solid #3498db'
+                          }}>
+                              {l}
+                          </div>
+                      ))
+                  )}
+              </div>
+          </div>
       </div>
 
       {incomingQuestion && (
           <div style={{ 
-              backgroundColor: '#f1c40f', 
-              padding: '20px', 
-              margin: '20px 0', 
+              background: 'linear-gradient(135deg, #f39c12 0%, #f1c40f 100%)', 
+              padding: '15px 20px', 
+              margin: '10px 0', 
               borderRadius: '10px',
-              boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
-              textAlign: 'center'
+              boxShadow: '0 4px 10px rgba(0,0,0,0.2)',
+              textAlign: 'center',
+              border: '3px solid #e67e22',
+              animation: 'shake 0.5s',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '15px'
           }}>
-              <h3 style={{ color: '#2c3e50' }}>El rival pregunta: {incomingQuestion.question}</h3>
-              <div style={{ marginTop: '15px' }}>
+              <div style={{
+                  fontSize: '2rem'
+              }}>
+                  ❓
+              </div>
+              <h3 style={{ 
+                  color: '#2c3e50',
+                  fontSize: '1.1rem',
+                  margin: 0,
+                  textShadow: '1px 1px 2px rgba(255,255,255,0.5)',
+                  flex: 1
+              }}>
+                  <strong>El rival pregunta:</strong> {incomingQuestion.question}
+              </h3>
+              <div style={{ display: 'flex', gap: '10px' }}>
                 <button onClick={() => answerQuestion(true)} style={{
                     padding: '10px 30px',
                     backgroundColor: '#27ae60',
                     color: 'white',
                     border: 'none',
-                    borderRadius: '5px',
+                    borderRadius: '8px',
                     cursor: 'pointer',
-                    marginRight: '10px',
-                    fontWeight: 'bold'
-                }}>SÍ</button>
+                    fontWeight: 'bold',
+                    fontSize: '1.1rem',
+                    boxShadow: '0 3px 6px rgba(0,0,0,0.2)',
+                    transition: 'all 0.2s',
+                    transform: 'scale(1)'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
+                onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                >
+                    ✓ SÍ
+                </button>
                 <button onClick={() => answerQuestion(false)} style={{
                     padding: '10px 30px',
                     backgroundColor: '#c0392b',
                     color: 'white',
                     border: 'none',
-                    borderRadius: '5px',
+                    borderRadius: '8px',
                     cursor: 'pointer',
-                    fontWeight: 'bold'
-                }}>NO</button>
+                    fontWeight: 'bold',
+                    fontSize: '1.1rem',
+                    boxShadow: '0 3px 6px rgba(0,0,0,0.2)',
+                    transition: 'all 0.2s',
+                    transform: 'scale(1)'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
+                onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                >
+                    ✗ NO
+                </button>
               </div>
           </div>
       )}
 
       {isMyTurn && !incomingQuestion && (
           <div style={{ 
-              margin: '20px 0', 
-              padding: '20px', 
-              backgroundColor: 'white',
+              margin: '10px 0', 
+              padding: '12px 15px', 
+              background: 'linear-gradient(135deg, #3498db 0%, #2980b9 100%)',
               borderRadius: '10px',
-              boxShadow: '0 2px 5px rgba(0,0,0,0.05)'
+              boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
+              border: '2px solid rgba(255,255,255,0.2)'
           }}>
-              <h3 style={{ marginTop: 0, color: '#2c3e50' }}>Fes una Pregunta</h3>
-              <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <div style={{ 
+                  display: 'flex', 
+                  gap: '10px', 
+                  alignItems: 'center', 
+                  flexWrap: 'wrap'
+              }}>
+                <span style={{
+                    color: 'white',
+                    fontWeight: 'bold',
+                    fontSize: '0.95rem',
+                    marginRight: '5px'
+                }}>
+                    💭 Pregunta:
+                </span>
                 <select 
                     value={selectedAttr} 
                     onChange={e => setSelectedAttr(e.target.value)}
-                    style={{ padding: '10px', borderRadius: '5px', border: '1px solid #bdc3c7' }}
+                    style={{ 
+                        padding: '8px 12px', 
+                        borderRadius: '6px', 
+                        border: '2px solid #2c3e50',
+                        fontSize: '0.9rem',
+                        fontWeight: 'bold',
+                        backgroundColor: 'white',
+                        cursor: 'pointer'
+                    }}
                 >
-                    <option value="gender">Gènere</option>
-                    <option value="hairColor">Color de Cabell</option>
-                    <option value="eyeColor">Color d'Ulls</option>
-                    <option value="hasBeard">Té Barba</option>
-                    <option value="hasGlasses">Té Ulleres</option>
-                    <option value="hasHat">Porta Barret</option>
+                    <option value="gender">👤 Gènere</option>
+                    <option value="hairColor">💇 Cabell</option>
+                    <option value="eyeColor">👁️ Ulls</option>
+                    <option value="hasBeard">🧔 Barba</option>
+                    <option value="hasGlasses">👓 Ulleres</option>
+                    <option value="hasHat">🎩 Barret</option>
                 </select>
                 
                 {['gender', 'hairColor', 'eyeColor'].includes(selectedAttr) ? (
                     <input 
                         type="text" 
-                        placeholder="Valor (ex. home, ros)" 
+                        placeholder="Valor" 
                         value={selectedValue} 
                         onChange={e => setSelectedValue(e.target.value)} 
-                        style={{ padding: '10px', borderRadius: '5px', border: '1px solid #bdc3c7' }}
+                        style={{ 
+                            padding: '8px 12px', 
+                            borderRadius: '6px', 
+                            border: '2px solid #2c3e50',
+                            fontSize: '0.9rem',
+                            minWidth: '150px'
+                        }}
                     />
                 ) : (
                     <select 
                         value={selectedValue} 
                         onChange={e => setSelectedValue(e.target.value)}
-                        style={{ padding: '10px', borderRadius: '5px', border: '1px solid #bdc3c7' }}
+                        style={{ 
+                            padding: '8px 12px', 
+                            borderRadius: '6px', 
+                            border: '2px solid #2c3e50',
+                            fontSize: '0.9rem',
+                            fontWeight: 'bold',
+                            backgroundColor: 'white',
+                            cursor: 'pointer'
+                        }}
                     >
                         <option value="">Selecciona...</option>
-                        <option value="true">Sí</option>
-                        <option value="false">No</option>
+                        <option value="true">✓ Sí</option>
+                        <option value="false">✗ No</option>
                     </select>
                 )}
 
                 <button onClick={askQuestion} style={{ 
-                    padding: '10px 20px', 
-                    backgroundColor: '#3498db', 
+                    padding: '8px 20px', 
+                    backgroundColor: '#27ae60', 
                     color: 'white', 
                     border: 'none', 
-                    borderRadius: '5px', 
+                    borderRadius: '6px', 
                     cursor: 'pointer',
-                    fontWeight: 'bold'
-                }}>Preguntar</button>
+                    fontWeight: 'bold',
+                    fontSize: '0.95rem',
+                    boxShadow: '0 3px 6px rgba(0,0,0,0.2)',
+                    transition: 'all 0.2s',
+                    transform: 'scale(1)'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
+                onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                >
+                    ❓ Preguntar
+                </button>
+                
+                <span style={{ 
+                    color: 'white', 
+                    fontSize: '0.8rem',
+                    marginLeft: 'auto',
+                    backgroundColor: 'rgba(255,255,255,0.1)',
+                    padding: '5px 10px',
+                    borderRadius: '5px'
+                }}>
+                    💡 Clica carta per descartar
+                </span>
               </div>
-              <p style={{ color: '#7f8c8d', fontSize: '0.9rem', marginTop: '10px' }}>
-                  Per endevinar un personatge, fes clic a la seva carta durant el teu torn.
-              </p>
           </div>
       )}
 
-      <GameBoard 
-        characters={characters} 
-        eliminatedIds={eliminatedIds} 
-        onToggleEliminate={(id) => {
-            if (isMyTurn && !incomingQuestion) {
-                toggleEliminate(id);
-            } else {
-                toggleEliminate(id);
-            }
-        }}
-        secretCharacter={mySecret}
-      />
+      <div style={{ 
+          flex: 1, 
+          display: 'flex', 
+          gap: '10px',
+          minHeight: 0,
+          overflow: 'hidden'
+      }}>
+          <GameBoard 
+            characters={characters} 
+            eliminatedIds={eliminatedIds} 
+            onToggleEliminate={(id) => {
+                if (isMyTurn && !incomingQuestion) {
+                    toggleEliminate(id);
+                } else {
+                    toggleEliminate(id);
+                }
+            }}
+            secretCharacter={mySecret}
+            playerColor="blue"
+          />
+      </div>
       
       {isMyTurn && (
-          <div style={{ marginTop: '30px', textAlign: 'center', padding: '20px', backgroundColor: '#ecf0f1', borderRadius: '10px' }}>
-              <h3 style={{ color: '#e67e22' }}>Preparat per endevinar?</h3>
-              <div style={{ display: 'flex', justifyContent: 'center', gap: '10px' }}>
-                <select id="guessSelect" style={{ padding: '10px', borderRadius: '5px', border: '1px solid #bdc3c7' }}>
-                    {characters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
-                <button onClick={() => {
-                    const select = document.getElementById('guessSelect') as HTMLSelectElement;
-                    guessCharacter(parseInt(select.value));
-                }} style={{
-                    padding: '10px 20px',
-                    backgroundColor: '#e67e22',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '5px',
-                    cursor: 'pointer',
-                    fontWeight: 'bold'
-                }}>Fer l'intent final</button>
-              </div>
+          <div style={{ 
+              marginTop: '10px', 
+              textAlign: 'center', 
+              padding: '12px 20px',
+              background: 'linear-gradient(135deg, #e67e22 0%, #d35400 100%)',
+              borderRadius: '10px',
+              boxShadow: '0 4px 8px rgba(0,0,0,0.3)',
+              border: '3px solid #c0392b',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '15px'
+          }}>
+              <span style={{ fontSize: '1.5rem' }}>🎯</span>
+              <span style={{ 
+                  color: 'white',
+                  fontSize: '1rem',
+                  fontWeight: 'bold',
+                  textShadow: '1px 1px 2px rgba(0,0,0,0.3)'
+              }}>
+                  Intent final:
+              </span>
+              <select id="guessSelect" style={{ 
+                  padding: '8px 12px', 
+                  borderRadius: '6px', 
+                  border: '2px solid #2c3e50',
+                  fontSize: '0.95rem',
+                  fontWeight: 'bold',
+                  backgroundColor: 'white',
+                  cursor: 'pointer'
+              }}>
+                  {characters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+              <button onClick={() => {
+                  const select = document.getElementById('guessSelect') as HTMLSelectElement;
+                  guessCharacter(parseInt(select.value));
+              }} style={{
+                  padding: '8px 25px',
+                  backgroundColor: '#c0392b',
+                  color: 'white',
+                  border: '2px solid #922b21',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontWeight: 'bold',
+                  fontSize: '1rem',
+                  boxShadow: '0 3px 6px rgba(0,0,0,0.3)',
+                  transition: 'all 0.2s',
+                  transform: 'scale(1)'
+              }}
+              onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'scale(1.05)';
+                  e.currentTarget.style.backgroundColor = '#a93226';
+              }}
+              onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'scale(1)';
+                  e.currentTarget.style.backgroundColor = '#c0392b';
+              }}
+              >
+                  🎲 Endevinar
+              </button>
+              <span style={{
+                  color: '#fff',
+                  fontSize: '0.8rem',
+                  backgroundColor: 'rgba(192,57,43,0.5)',
+                  padding: '5px 10px',
+                  borderRadius: '5px'
+              }}>
+                  ⚠️ Si falles, perds!
+              </span>
           </div>
       )}
     </div>
