@@ -12,10 +12,27 @@ export interface Character {
   };
 }
 
+export type GameMode = 'hardcore' | 'lives';
+export type TurnTimeLimit = 15 | 30 | 60;
+
 export interface Player {
   id: string; // socket id
   name?: string;
   secretCharacterId?: number;
+  lives?: number; // for 'lives' mode
+}
+
+export interface PredefinedQuestion {
+  id: string;
+  question: string;
+  attribute: string;
+  value: any;
+  category: 'gender' | 'hair' | 'eyes' | 'accessories';
+}
+
+export interface GameConfig {
+  mode: GameMode;
+  turnTime: TurnTimeLimit;
 }
 
 export interface GameState {
@@ -24,4 +41,7 @@ export interface GameState {
   turn: string; // socket id of current turn
   status: 'waiting' | 'playing' | 'finished';
   winner?: string;
+  turnStartTime?: number; // timestamp when current turn started
+  turnTimeLimit?: number; // time limit in seconds (default 60)
+  config?: GameConfig; // game configuration
 }
