@@ -5,7 +5,8 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { connectRedis, createRoom, getRoom, addPlayerToRoom, updateRoom, setSecretCharacter, getSecretCharacter, deleteRoom, getAvailableRooms } from './services/redisService';
 import { characters } from './data/characters';
-import { GameState } from './types';
+import { predefinedQuestions } from './data/predefinedQuestions';
+import { GameState, Character } from './types';
 
 dotenv.config();
 
@@ -21,9 +22,53 @@ const io = new Server(server, {
     }
 });
 
+// Store turn timers
+const turnTimers = new Map<string, NodeJS.Timeout>();
+
+// Turn time limit in seconds
+const TURN_TIME_LIMIT = 60; // default fallback
+
+async function startTurnTimer(roomId: string, currentPlayerId: string) {
+    // Clear existing timer if any
+    if (turnTimers.has(roomId)) {
+        clearTimeout(turnTimers.get(roomId)!);
+    }
+
+    const room = await getRoom(roomId);
+    const limit = room?.turnTimeLimit || room?.config?.turnTime || TURN_TIME_LIMIT;
+
+    const timer = setTimeout(async () => {
+        const refreshed = await getRoom(roomId);
+        if (refreshed && refreshed.status === 'playing' && refreshed.turn === currentPlayerId) {
+            const otherPlayer = refreshed.players.find(p => p.id !== currentPlayerId);
+            if (otherPlayer) {
+                refreshed.turn = otherPlayer.id;
+                refreshed.turnStartTime = Date.now();
+                await updateRoom(roomId, refreshed);
+                io.to(roomId).emit('room_update', refreshed);
+                io.to(roomId).emit('turn_timeout', { playerId: currentPlayerId });
+                startTurnTimer(roomId, otherPlayer.id);
+            }
+        }
+    }, limit * 1000);
+
+    turnTimers.set(roomId, timer);
+}
+
+function clearTurnTimer(roomId: string) {
+    if (turnTimers.has(roomId)) {
+        clearTimeout(turnTimers.get(roomId)!);
+        turnTimers.delete(roomId);
+    }
+}
+
 // API Routes
 app.get('/api/characters', (req: Request, res: Response) => {
     res.json(characters);
+});
+
+app.get('/api/predefined-questions', (req: Request, res: Response) => {
+    res.json(predefinedQuestions);
 });
 
 io.on('connection', (socket: Socket) => {
@@ -34,10 +79,14 @@ io.on('connection', (socket: Socket) => {
         socket.emit('rooms_list', rooms);
     });
 
-    socket.on('join_room', async ({ roomId, username }: { roomId: string, username: string }) => {
+    socket.on('join_room', async ({ roomId, username, config }: { roomId: string, username: string, config?: any }) => {
         let room = await getRoom(roomId);
         if (!room) {
-            room = await createRoom(roomId);
+            room = await createRoom(roomId, config);
+        } else if (config && !room.config) {
+            // Attach config if it was missing
+            room.config = config;
+            await updateRoom(roomId, room);
         }
 
         if (room.players.length >= 2) {
@@ -51,7 +100,11 @@ io.on('connection', (socket: Socket) => {
             // Check if player is already in room to avoid duplicates on re-joins
             const existingPlayer = room.players.find(p => p.id === socket.id);
             if (!existingPlayer) {
-                const newPlayer = { id: socket.id, name: username };
+                const newPlayer = { 
+                    id: socket.id, 
+                    name: username,
+                    lives: room.config?.mode === 'lives' ? 2 : undefined
+                };
                 const updatedRoom = await addPlayerToRoom(roomId, newPlayer);
                 if (updatedRoom) room = updatedRoom;
             }
@@ -68,6 +121,15 @@ io.on('connection', (socket: Socket) => {
             // Start Game
             room.status = 'playing';
             room.turn = room.players[0].id; // Player 1 starts
+            room.turnStartTime = Date.now();
+            room.turnTimeLimit = room.config?.turnTime || TURN_TIME_LIMIT;
+            
+            // Initialize lives for 'lives' mode
+            if (room.config?.mode === 'lives') {
+                room.players.forEach(p => {
+                    if (p.lives === undefined) p.lives = 2;
+                });
+            }
             
             // Assign secret characters
             const char1 = characters[Math.floor(Math.random() * characters.length)];
@@ -83,6 +145,9 @@ io.on('connection', (socket: Socket) => {
             io.to(room.players[0].id).emit('secret_character', char1);
             io.to(room.players[1].id).emit('secret_character', char2);
             io.to(roomId).emit('game_started', room);
+            
+            // Start turn timer
+            startTurnTimer(roomId, room.players[0].id);
         }
     });
 
@@ -104,8 +169,12 @@ io.on('connection', (socket: Socket) => {
             const otherPlayer = room.players.find(p => p.id !== socket.id);
             if (otherPlayer) {
                 room.turn = socket.id; // The one who answered (socket.id) now gets the turn
+                room.turnStartTime = Date.now();
                 await updateRoom(roomId, room);
                 io.to(roomId).emit('room_update', room);
+                
+                // Start timer for new turn
+                startTurnTimer(roomId, socket.id);
             }
         }
     });
@@ -114,23 +183,48 @@ io.on('connection', (socket: Socket) => {
         const room = await getRoom(roomId);
         if (!room) return;
 
+        const player = room.players.find(p => p.id === socket.id);
         const opponent = room.players.find(p => p.id !== socket.id);
-        if (!opponent) return;
+        if (!opponent || !player) return;
 
         const opponentSecretId = await getSecretCharacter(roomId, opponent.id);
-        
+
         if (opponentSecretId === characterId) {
-            // Win
+            // Win - Correct guess
+            clearTurnTimer(roomId);
             room.status = 'finished';
             room.winner = socket.id;
             await updateRoom(roomId, room);
-            io.to(roomId).emit('game_over', { winner: socket.id, reason: 'Encertat' });
+            io.to(roomId).emit('game_over', { winner: socket.id, reason: 'Encertat! 🎉' });
         } else {
-            // Lose (Incorrect guess)
-            room.status = 'finished';
-            room.winner = opponent.id;
-            await updateRoom(roomId, room);
-            io.to(roomId).emit('game_over', { winner: opponent.id, reason: 'Incorrecte' });
+            // Wrong guess - Handle based on game mode
+            const gameMode = room.config?.mode || 'hardcore';
+
+            if (gameMode === 'hardcore') {
+                clearTurnTimer(roomId);
+                room.status = 'finished';
+                room.winner = opponent.id;
+                await updateRoom(roomId, room);
+                io.to(roomId).emit('game_over', { winner: opponent.id, reason: 'Endevinalla incorrecta! ⚡' });
+            } else if (gameMode === 'lives') {
+                if (player.lives !== undefined) {
+                    player.lives -= 1;
+                    if (player.lives <= 0) {
+                        clearTurnTimer(roomId);
+                        room.status = 'finished';
+                        room.winner = opponent.id;
+                        await updateRoom(roomId, room);
+                        io.to(roomId).emit('game_over', { winner: opponent.id, reason: 'Sense vides! 💔' });
+                    } else {
+                        room.turn = opponent.id;
+                        room.turnStartTime = Date.now();
+                        await updateRoom(roomId, room);
+                        io.to(roomId).emit('room_update', room);
+                        io.to(socket.id).emit('life_lost', { livesRemaining: player.lives });
+                        startTurnTimer(roomId, opponent.id);
+                    }
+                }
+            }
         }
     });
 

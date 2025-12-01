@@ -1,5 +1,5 @@
 import { createClient } from 'redis';
-import { GameState, Player } from '../types';
+import { GameState, Player, GameConfig } from '../types';
 
 const client = createClient({
     url: process.env.REDIS_URL || 'redis://localhost:6379'
@@ -12,12 +12,13 @@ export const connectRedis = async () => {
     console.log('Connected to Redis');
 };
 
-export const createRoom = async (roomId: string): Promise<GameState> => {
+export const createRoom = async (roomId: string, config?: GameConfig): Promise<GameState> => {
     const initialState: GameState = {
         roomId,
         players: [],
         turn: '',
-        status: 'waiting'
+        status: 'waiting',
+        config
     };
     await client.hSet(`room:${roomId}`, {
         data: JSON.stringify(initialState)

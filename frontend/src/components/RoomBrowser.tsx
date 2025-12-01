@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { socket } from '../socket';
+import { RoomConfig } from './RoomConfig';
 
 interface Props {
-    onJoinRoom: (roomId: string) => void;
+    onJoinRoom: (roomId: string, config?: any) => void;
     wins: number;
     losses: number;
 }
@@ -10,7 +11,7 @@ interface Props {
 export const RoomBrowser: React.FC<Props> = ({ onJoinRoom, wins, losses }) => {
     const [rooms, setRooms] = useState<string[]>([]);
     const [search, setSearch] = useState('');
-    const [newRoomName, setNewRoomName] = useState('');
+    const [showConfig, setShowConfig] = useState(false);
 
     useEffect(() => {
         socket.connect();
@@ -29,11 +30,9 @@ export const RoomBrowser: React.FC<Props> = ({ onJoinRoom, wins, losses }) => {
 
     const filteredRooms = rooms.filter(r => r.toLowerCase().includes(search.toLowerCase()));
 
-    const handleCreate = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (newRoomName.trim()) {
-            onJoinRoom(newRoomName);
-        }
+    const handleCreateRoom = (roomName: string, config: any) => {
+        onJoinRoom(roomName, config);
+        setShowConfig(false);
     };
 
     return (
@@ -45,6 +44,13 @@ export const RoomBrowser: React.FC<Props> = ({ onJoinRoom, wins, losses }) => {
             position: 'relative',
             boxSizing: 'border-box'
         }}>
+            {showConfig && (
+                <RoomConfig
+                    onCreateRoom={handleCreateRoom}
+                    onCancel={() => setShowConfig(false)}
+                />
+            )}
+
             <div style={{
                 textAlign: 'center',
                 marginBottom: '2rem'
@@ -91,39 +97,31 @@ export const RoomBrowser: React.FC<Props> = ({ onJoinRoom, wins, losses }) => {
                     }}>
                         Crear Nova Sala
                     </h2>
-                    <form onSubmit={handleCreate} style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
-                        <input 
-                            type="text" 
-                            placeholder="Nom de la Sala" 
-                            value={newRoomName}
-                            onChange={e => setNewRoomName(e.target.value)}
-                            style={{ 
-                                padding: '15px', 
-                                borderRadius: '10px', 
-                                border: '3px solid #2c3e50',
-                                fontSize: '1.1rem',
+                    <div style={{ textAlign: 'center' }}>
+                        <p style={{ color: 'white', marginBottom: '1.5rem', fontSize: '1rem' }}>
+                            Configura el teu mode de joc preferit i temps per torn
+                        </p>
+                        <button 
+                            onClick={() => setShowConfig(true)}
+                            style={{
+                                padding: '18px 30px',
+                                backgroundColor: '#c0392b',
+                                color: 'white',
+                                border: '3px solid #922b21',
+                                borderRadius: '10px',
+                                cursor: 'pointer',
                                 fontWeight: 'bold',
-                                textAlign: 'center'
+                                fontSize: '1.3rem',
+                                boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
+                                transition: 'all 0.2s',
+                                width: '100%'
                             }}
-                        />
-                        <button type="submit" style={{
-                            padding: '15px',
-                            backgroundColor: '#c0392b',
-                            color: 'white',
-                            border: '3px solid #922b21',
-                            borderRadius: '10px',
-                            cursor: 'pointer',
-                            fontWeight: 'bold',
-                            fontSize: '1.2rem',
-                            boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
-                            transition: 'all 0.2s'
-                        }}
-                        onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
-                        onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                            onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
+                            onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
                         >
-                            🚪 Crear i Unir-se
+                            ⚙️ Crear Nova Sala
                         </button>
-                    </form>
+                    </div>
                 </div>
 
                 {/* Room List Section */}

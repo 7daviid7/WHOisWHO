@@ -5,30 +5,55 @@ import { RoomBrowser } from './components/RoomBrowser';
 import { WaitingScreen } from './components/WaitingScreen';
 import { GameOverModal } from './components/GameOverModal';
 import { GameBoard } from './components/GameBoard';
-import { Character, GameState } from './types';
+import { Character, GameState, PredefinedQuestion } from './types';
 
 function App() {
   const [username, setUsername] = useState('');
   const [isConnected, setIsConnected] = useState(socket.connected);
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [characters, setCharacters] = useState<Character[]>([]);
+  const [predefinedQuestions, setPredefinedQuestions] = useState<PredefinedQuestion[]>([]);
   const [eliminatedIds, setEliminatedIds] = useState<number[]>([]);
   const [mySecret, setMySecret] = useState<Character | undefined>(undefined);
   const [logs, setLogs] = useState<string[]>([]);
   const [wins, setWins] = useState(0);
   const [losses, setLosses] = useState(0);
+  const [timeRemaining, setTimeRemaining] = useState<number>(60);
   
   // Question State
   const [selectedAttr, setSelectedAttr] = useState<string>('gender');
   const [selectedValue, setSelectedValue] = useState<string>('');
+  const [showPredefinedQuestions, setShowPredefinedQuestions] = useState(false);
   
   // Incoming Question State
   const [incomingQuestion, setIncomingQuestion] = useState<{question: string, attribute: string, value: any} | null>(null);
+
+  // Timer effect
+  useEffect(() => {
+    if (!gameState || gameState.status !== 'playing' || !gameState.turnStartTime || !gameState.turnTimeLimit) {
+      return;
+    }
+
+    const updateTimer = () => {
+      const elapsed = Math.floor((Date.now() - gameState.turnStartTime!) / 1000);
+      const remaining = Math.max(0, gameState.turnTimeLimit! - elapsed);
+      setTimeRemaining(remaining);
+    };
+
+    updateTimer(); // Initial update
+    const interval = setInterval(updateTimer, 100); // Update every 100ms for smooth countdown
+
+    return () => clearInterval(interval);
+  }, [gameState?.turnStartTime, gameState?.turn, gameState?.status]);
 
   useEffect(() => {
     fetch('/api/characters')
       .then(res => res.json())
       .then(data => setCharacters(data));
+
+    fetch('/api/predefined-questions')
+      .then(res => res.json())
+      .then(data => setPredefinedQuestions(data));
 
     function onConnect() {
       setIsConnected(true);
@@ -69,6 +94,14 @@ function App() {
         }
     }
 
+    function onTurnTimeout(data: {playerId: string}) {
+        setLogs(prev => [...prev, `⏰ Temps esgotat!`]);
+    }
+
+    function onLifeLost(data: {livesRemaining: number}) {
+        setLogs(prev => [...prev, `💔 Has perdut una vida! Vides restants: ${data.livesRemaining}`]);
+    }
+
     socket.on('connect', onConnect);
     socket.on('disconnect', onDisconnect);
     socket.on('room_update', onRoomUpdate);
@@ -77,6 +110,8 @@ function App() {
     socket.on('receive_question', onReceiveQuestion);
     socket.on('receive_answer', onReceiveAnswer);
     socket.on('game_over', onGameOver);
+    socket.on('turn_timeout', onTurnTimeout);
+    socket.on('life_lost', onLifeLost);
 
     return () => {
       socket.off('connect', onConnect);
@@ -87,6 +122,8 @@ function App() {
       socket.off('receive_question', onReceiveQuestion);
       socket.off('receive_answer', onReceiveAnswer);
       socket.off('game_over', onGameOver);
+      socket.off('turn_timeout', onTurnTimeout);
+            socket.off('life_lost', onLifeLost);
     };
   }, []);
 
@@ -94,9 +131,9 @@ function App() {
       setUsername(name);
   };
 
-  const joinRoom = (roomId: string) => {
+    const joinRoom = (roomId: string, config?: any) => {
     socket.connect();
-    socket.emit('join_room', { roomId, username });
+        socket.emit('join_room', { roomId, username, config });
   };
 
   const toggleEliminate = (id: number) => {
@@ -127,6 +164,18 @@ function App() {
         value: selectedValue 
     });
     setLogs(prev => [...prev, `Has preguntat: ${question}`]);
+  };
+
+  const askPredefinedQuestion = (q: PredefinedQuestion) => {
+    if (!gameState || gameState.turn !== socket.id) return;
+    socket.emit('ask_question', {
+        roomId: gameState.roomId,
+        question: q.question,
+        attribute: q.attribute,
+        value: q.value
+    });
+    setLogs(prev => [...prev, `Has preguntat: ${q.question}`]);
+    setShowPredefinedQuestions(false);
   };
 
   const answerQuestion = (answer: boolean) => {
@@ -163,7 +212,7 @@ function App() {
   }
 
   if (!gameState) {
-    return <RoomBrowser onJoinRoom={joinRoom} wins={wins} losses={losses} />;
+        return <RoomBrowser onJoinRoom={joinRoom} wins={wins} losses={losses} />;
   }
 
   if (gameState.status === 'waiting') {
@@ -173,6 +222,9 @@ function App() {
   const isMyTurn = gameState.turn === socket.id;
   const opponent = gameState.players.find(p => p.id !== socket.id);
   const opponentName = opponent?.name || 'Rival';
+    const myPlayer = gameState.players.find(p => p.id === socket.id);
+    const myLives = myPlayer?.lives;
+    const opponentLives = opponent?.lives;
 
   return (
     <div style={{ 
@@ -235,15 +287,109 @@ function App() {
                   boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
                   animation: isMyTurn ? 'pulse 2s infinite' : 'none'
               }}>
-                  <p style={{ 
-                      fontSize: '1rem', 
-                      fontWeight: 'bold', 
-                      color: 'white',
-                      margin: 0,
-                      textShadow: '1px 1px 2px rgba(0,0,0,0.3)'
+                  {gameState.config && (
+                      <div style={{
+                          marginTop: '5px',
+                          display: 'flex',
+                          gap: '8px',
+                          fontSize: '0.75rem'
+                      }}>
+                          <span style={{
+                              backgroundColor: '#9b59b6',
+                              padding: '3px 8px',
+                              borderRadius: '5px',
+                              color: 'white',
+                              fontWeight: 'bold'
+                          }}>
+                              {gameState.config.mode === 'hardcore' && '⚡ HARDCORE'}
+                              {gameState.config.mode === 'lives' && '❤️ VIDES'}
+                          </span>
+                          <span style={{
+                              backgroundColor: '#3498db',
+                              padding: '3px 8px',
+                              borderRadius: '5px',
+                              color: 'white',
+                              fontWeight: 'bold'
+                          }}>
+                              ⏱️ {gameState.config.turnTime}s
+                          </span>
+                      </div>
+                  )}
+                                    {/* Lives Display for Lives Mode */}
+                                    {gameState.config?.mode === 'lives' && (
+                                        <div style={{
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            gap: '8px',
+                                            backgroundColor: 'rgba(255,255,255,0.1)',
+                                            padding: '10px 15px',
+                                            borderRadius: '8px'
+                                        }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                <span style={{ color: '#FFD700', fontSize: '0.9rem', fontWeight: 'bold' }}>
+                                                    Tu:
+                                                </span>
+                                                <span style={{ fontSize: '1.2rem' }}>
+                                                    {Array.from({ length: myLives || 0 }).map(() => '❤️').join(' ')}
+                                                    {Array.from({ length: 2 - (myLives || 0) }).map(() => '🖤').join(' ')}
+                                                </span>
+                                            </div>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                <span style={{ color: '#ecf0f1', fontSize: '0.9rem', fontWeight: 'bold' }}>
+                                                    {opponentName}:
+                                                </span>
+                                                <span style={{ fontSize: '1.2rem' }}>
+                                                    {Array.from({ length: opponentLives || 0 }).map(() => '❤️').join(' ')}
+                                                    {Array.from({ length: 2 - (opponentLives || 0) }).map(() => '🖤').join(' ')}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    )}
+                                    <p style={{ 
+                                        fontSize: '1rem', 
+                                        fontWeight: 'bold', 
+                                        color: 'white',
+                                        margin: 0,
+                                        textShadow: '1px 1px 2px rgba(0,0,0,0.3)'
+                                    }}>
+                                        {isMyTurn ? "⏰ EL TEU TORN" : "⌛ TORN RIVAL"}
+                                    </p>
+              </div>
+
+              {/* Timer Display */}
+              <div style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: '5px'
+              }}>
+                  <div style={{
+                      fontSize: '2rem',
+                      fontWeight: 'bold',
+                      color: timeRemaining <= 10 ? '#e74c3c' : '#FFD700',
+                      textShadow: '2px 2px 4px rgba(0,0,0,0.5)',
+                      animation: timeRemaining <= 10 ? 'pulse 1s infinite' : 'none',
+                      minWidth: '70px',
+                      textAlign: 'center'
                   }}>
-                      {isMyTurn ? "⏰ EL TEU TORN" : "⌛ TORN RIVAL"}
-                  </p>
+                      {timeRemaining}s
+                  </div>
+                  <div style={{
+                      width: '100px',
+                      height: '8px',
+                      backgroundColor: 'rgba(255,255,255,0.2)',
+                      borderRadius: '4px',
+                      overflow: 'hidden',
+                      border: '1px solid rgba(255,255,255,0.3)'
+                  }}>
+                      <div style={{
+                          height: '100%',
+                          width: `${(timeRemaining / (gameState.turnTimeLimit || 60)) * 100}%`,
+                          backgroundColor: timeRemaining <= 10 ? '#e74c3c' : timeRemaining <= 30 ? '#f39c12' : '#27ae60',
+                          transition: 'width 0.1s linear, background-color 0.3s ease',
+                          boxShadow: timeRemaining <= 10 ? '0 0 10px #e74c3c' : 'none'
+                      }}></div>
+                  </div>
               </div>
           </div>
           
@@ -463,6 +609,27 @@ function App() {
                 >
                     ❓ Preguntar
                 </button>
+
+                <button 
+                    onClick={() => setShowPredefinedQuestions(!showPredefinedQuestions)} 
+                    style={{ 
+                        padding: '8px 20px', 
+                        backgroundColor: '#9b59b6', 
+                        color: 'white', 
+                        border: 'none', 
+                        borderRadius: '6px', 
+                        cursor: 'pointer',
+                        fontWeight: 'bold',
+                        fontSize: '0.95rem',
+                        boxShadow: '0 3px 6px rgba(0,0,0,0.2)',
+                        transition: 'all 0.2s',
+                        transform: 'scale(1)'
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
+                    onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                >
+                    📝 Preguntes ràpides
+                </button>
                 
                 <span style={{ 
                     color: 'white', 
@@ -475,6 +642,54 @@ function App() {
                     💡 Clica carta per descartar
                 </span>
               </div>
+
+              {/* Predefined Questions Dropdown */}
+              {showPredefinedQuestions && (
+                  <div style={{
+                      marginTop: '10px',
+                      backgroundColor: 'rgba(255,255,255,0.95)',
+                      borderRadius: '8px',
+                      padding: '10px',
+                      maxHeight: '200px',
+                      overflowY: 'auto',
+                      boxShadow: '0 4px 8px rgba(0,0,0,0.2)'
+                  }}>
+                      <div style={{
+                          display: 'grid',
+                          gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+                          gap: '8px'
+                      }}>
+                          {predefinedQuestions.map(q => (
+                              <button
+                                  key={q.id}
+                                  onClick={() => askPredefinedQuestion(q)}
+                                  style={{
+                                      padding: '10px',
+                                      backgroundColor: '#ecf0f1',
+                                      border: '2px solid #3498db',
+                                      borderRadius: '6px',
+                                      cursor: 'pointer',
+                                      textAlign: 'left',
+                                      fontSize: '0.85rem',
+                                      transition: 'all 0.2s',
+                                      fontWeight: '500',
+                                      color: '#2c3e50'
+                                  }}
+                                  onMouseEnter={(e) => {
+                                      e.currentTarget.style.backgroundColor = '#3498db';
+                                      e.currentTarget.style.color = 'white';
+                                  }}
+                                  onMouseLeave={(e) => {
+                                      e.currentTarget.style.backgroundColor = '#ecf0f1';
+                                      e.currentTarget.style.color = '#2c3e50';
+                                  }}
+                              >
+                                  {q.question}
+                              </button>
+                          ))}
+                      </div>
+                  </div>
+              )}
           </div>
       )}
 
