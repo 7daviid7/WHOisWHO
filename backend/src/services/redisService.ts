@@ -75,3 +75,42 @@ export const deleteRoom = async (roomId: string) => {
     await client.del(`room:${roomId}:secrets`);
     await client.sRem('available_rooms', roomId);
 };
+
+// Simple user storage (username -> passwordHash)
+export const setUser = async (username: string, passwordHash: string) => {
+    await client.hSet('users', username, passwordHash);
+};
+
+export const getUser = async (username: string): Promise<string | null> => {
+    const hash = await client.hGet('users', username);
+    return hash || null;
+};
+
+// User stats stored in a hash 'user_stats' where value is JSON { wins, losses }
+export const addWin = async (username: string) => {
+    const cur = await client.hGet('user_stats', username);
+    let stats = { wins: 0, losses: 0 };
+    if (cur) {
+        try { stats = JSON.parse(cur); } catch { stats = { wins: 0, losses: 0 }; }
+    }
+    stats.wins = (stats.wins || 0) + 1;
+    await client.hSet('user_stats', username, JSON.stringify(stats));
+    return stats;
+};
+
+export const addLoss = async (username: string) => {
+    const cur = await client.hGet('user_stats', username);
+    let stats = { wins: 0, losses: 0 };
+    if (cur) {
+        try { stats = JSON.parse(cur); } catch { stats = { wins: 0, losses: 0 }; }
+    }
+    stats.losses = (stats.losses || 0) + 1;
+    await client.hSet('user_stats', username, JSON.stringify(stats));
+    return stats;
+};
+
+export const getUserStats = async (username: string) => {
+    const cur = await client.hGet('user_stats', username);
+    if (!cur) return { wins: 0, losses: 0 };
+    try { return JSON.parse(cur); } catch { return { wins: 0, losses: 0 }; }
+};
