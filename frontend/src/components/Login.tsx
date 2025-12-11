@@ -6,12 +6,54 @@ interface Props {
 
 export const Login: React.FC<Props> = ({ onLogin }) => {
     const [username, setUsername] = useState('');
+    const [password, setPassword] = useState('');
+    const [mode, setMode] = useState<'login' | 'register'>('login');
+    const [error, setError] = useState<string | null>(null);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (username.trim()) {
-            onLogin(username);
+        setError(null);
+        if (!username.trim() || !password) {
+            setError('Introdueix nom i contrasenya');
+            return;
         }
+
+        const url = mode === 'login' ? '/api/login' : '/api/register';
+        fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: username.trim(), password })
+        }).then(async res => {
+            const data = await res.json();
+            if (!res.ok) {
+                // Map server status to clearer Catalan messages
+                if (res.status === 401) {
+                    setError('Usuari no existeix o contrasenya incorrecta');
+                } else if (res.status === 409) {
+                    setError("L'usuari ja existeix");
+                } else if (res.status === 400) {
+                    setError(data.error || 'Falten camps');
+                } else {
+                    setError(data.error || 'Error al servidor');
+                }
+                return;
+            }
+
+            if (mode === 'register') {
+                // successful registration -> inform user and switch to login
+                setError(null);
+                alert('Registre correcte. Ara pots iniciar sessió.');
+                setMode('login');
+                setPassword('');
+                return;
+            }
+
+            // successful login
+            onLogin(username.trim());
+        }).catch(err => {
+            console.error(err);
+            setError('No s&#39;ha pogut contactar el servidor');
+        });
     };
 
     return (
@@ -70,7 +112,7 @@ export const Login: React.FC<Props> = ({ onLogin }) => {
                     textAlign: 'center',
                     textShadow: '1px 1px 2px rgba(0,0,0,0.2)'
                 }}>
-                    👤 Introdueix el teu nom:
+                    {mode === 'login' ? '👤 Inicia sessió' : '📝 Registre d\'usuari'}
                 </label>
                 <input 
                     type="text" 
@@ -89,6 +131,33 @@ export const Login: React.FC<Props> = ({ onLogin }) => {
                     placeholder="El teu nom..."
                     autoFocus
                 />
+                <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Contrasenya..."
+                    style={{
+                        padding: '12px 16px',
+                        fontSize: '1.1rem',
+                        borderRadius: '8px',
+                        border: '3px solid #2c3e50',
+                        width: '100%',
+                        boxSizing: 'border-box',
+                        fontWeight: 'bold',
+                        textAlign: 'center'
+                    }}
+                />
+                {error && (
+                    <div style={{ color: '#ffdddd', background: 'rgba(192,57,43,0.9)', padding: '8px', borderRadius: '6px', textAlign: 'center' }}>{error}</div>
+                )}
+                <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', alignItems: 'center' }}>
+                    <button type="button" onClick={() => setMode(mode === 'login' ? 'register' : 'login')} style={{ padding: '8px 10px', borderRadius: '6px', border: '2px solid #1e8449', background: '#ecf0f1', cursor: 'pointer' }}>
+                        {mode === 'login' ? 'Vull registrar-me' : 'Tornar al login'}
+                    </button>
+                    <div style={{ color: '#ecf0f1', fontSize: '0.9rem' }}>
+                        {mode === 'login' ? 'Encara no tens compte?' : 'Ja tens compte?'}
+                    </div>
+                </div>
                 <button type="submit" style={{
                     padding: '15px 30px',
                     fontSize: '1.3rem',
@@ -111,7 +180,7 @@ export const Login: React.FC<Props> = ({ onLogin }) => {
                     e.currentTarget.style.boxShadow = '0 6px 12px rgba(0,0,0,0.2)';
                 }}
                 >
-                    🚀 Començar a jugar
+                    {mode === 'login' ? '🚀 Iniciar sessió' : '✅ Registrar'}
                 </button>
             </form>
             <div style={{

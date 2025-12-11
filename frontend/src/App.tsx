@@ -87,11 +87,12 @@ function App() {
 
     function onGameOver(data: {winner: string, reason: string}) {
         setGameState(prev => prev ? {...prev, status: 'finished', winner: data.winner, reason: data.reason} as any : null);
-        if (data.winner === socket.id) {
-            setWins(prev => prev + 1);
-        } else {
-            setLosses(prev => prev + 1);
-        }
+    }
+
+    function onStatsUpdate(data: {wins: number, losses: number}) {
+        if (!data) return;
+        setWins(data.wins || 0);
+        setLosses(data.losses || 0);
     }
 
     function onTurnTimeout(data: {playerId: string}) {
@@ -112,6 +113,7 @@ function App() {
     socket.on('game_over', onGameOver);
     socket.on('turn_timeout', onTurnTimeout);
     socket.on('life_lost', onLifeLost);
+    socket.on('stats_update', onStatsUpdate);
 
     return () => {
       socket.off('connect', onConnect);
@@ -124,12 +126,28 @@ function App() {
       socket.off('game_over', onGameOver);
       socket.off('turn_timeout', onTurnTimeout);
             socket.off('life_lost', onLifeLost);
+        socket.off('stats_update', onStatsUpdate);
     };
   }, []);
 
   const handleLogin = (name: string) => {
       setUsername(name);
   };
+
+    // Load persistent stats when username is set (after login)
+    useEffect(() => {
+        if (!username) return;
+        fetch(`/api/stats/${encodeURIComponent(username)}`)
+            .then(res => res.json())
+            .then(data => {
+                if (data && typeof data === 'object') {
+                    setWins(data.wins || 0);
+                    setLosses(data.losses || 0);
+                }
+            }).catch(err => {
+                console.warn('Could not load stats:', err);
+            });
+    }, [username]);
 
     const joinRoom = (roomId: string, config?: any) => {
     socket.connect();

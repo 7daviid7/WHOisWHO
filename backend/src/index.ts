@@ -3,7 +3,10 @@ import http from 'http';
 import { Server, Socket } from 'socket.io';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import bcrypt from 'bcryptjs';
 import { connectRedis, createRoom, getRoom, addPlayerToRoom, updateRoom, setSecretCharacter, getSecretCharacter, deleteRoom, getAvailableRooms } from './services/redisService';
+import { setUser, getUser } from './services/redisService';
+import { addWin, addLoss, getUserStats } from './services/redisService';
 import { characters } from './data/characters';
 import { predefinedQuestions } from './data/predefinedQuestions';
 import { GameState, Character } from './types';
@@ -71,6 +74,50 @@ app.get('/api/predefined-questions', (req: Request, res: Response) => {
     res.json(predefinedQuestions);
 });
 
+// Auth endpoints
+app.post('/api/register', async (req: Request, res: Response) => {
+    const { username, password } = req.body;
+    if (!username || !password) return res.status(400).json({ error: 'Missing username or password' });
+    try {
+        const existing = await getUser(username);
+        if (existing) return res.status(409).json({ error: 'User already exists' });
+        const hash = await bcrypt.hash(password, 10);
+        await setUser(username, hash);
+        return res.json({ ok: true });
+    } catch (err) {
+        console.error('Register error', err);
+        return res.status(500).json({ error: 'Internal error' });
+    }
+});
+
+app.post('/api/login', async (req: Request, res: Response) => {
+    const { username, password } = req.body;
+    if (!username || !password) return res.status(400).json({ error: 'Missing username or password' });
+    try {
+        const hash = await getUser(username);
+        if (!hash) return res.status(401).json({ error: 'Invalid credentials' });
+        const ok = await bcrypt.compare(password, hash);
+        if (!ok) return res.status(401).json({ error: 'Invalid credentials' });
+        return res.json({ ok: true, username });
+    } catch (err) {
+        console.error('Login error', err);
+        return res.status(500).json({ error: 'Internal error' });
+    }
+});
+
+// Get user stats
+app.get('/api/stats/:username', async (req: Request, res: Response) => {
+    const username = req.params.username;
+    if (!username) return res.status(400).json({ error: 'Missing username' });
+    try {
+        const stats = await getUserStats(username);
+        return res.json(stats);
+    } catch (err) {
+        console.error('Stats error', err);
+        return res.status(500).json({ error: 'Internal error' });
+    }
+});
+
 io.on('connection', (socket: Socket) => {
     console.log('User connected:', socket.id);
 
@@ -112,6 +159,15 @@ io.on('connection', (socket: Socket) => {
 
         socket.join(roomId);
         io.to(roomId).emit('room_update', room);
+        // Send current stats to players who are connected
+        try {
+            for (const p of room.players) {
+                const s = await getUserStats(p.name);
+                io.to(p.id).emit('stats_update', s);
+            }
+        } catch (e) {
+            console.error('Error sending stats on join:', e);
+        }
         
         // Broadcast updated room list to everyone in lobby
         const availableRooms = await getAvailableRooms();
@@ -196,6 +252,17 @@ io.on('connection', (socket: Socket) => {
             room.winner = socket.id;
             await updateRoom(roomId, room);
             io.to(roomId).emit('game_over', { winner: socket.id, reason: 'Encertat! 🎉' });
+            try {
+                const winnerName = player.name;
+                const loserName = opponent.name;
+                const wStats = await addWin(winnerName);
+                const lStats = await addLoss(loserName);
+                // Emit updated stats to both players
+                io.to(player.id).emit('stats_update', wStats);
+                io.to(opponent.id).emit('stats_update', lStats);
+            } catch (e) {
+                console.error('Error updating stats:', e);
+            }
         } else {
             // Wrong guess - Handle based on game mode
             const gameMode = room.config?.mode || 'hardcore';
@@ -206,6 +273,16 @@ io.on('connection', (socket: Socket) => {
                 room.winner = opponent.id;
                 await updateRoom(roomId, room);
                 io.to(roomId).emit('game_over', { winner: opponent.id, reason: 'Endevinalla incorrecta! ⚡' });
+                try {
+                    const winnerName = opponent.name;
+                    const loserName = player.name;
+                    const wStats = await addWin(winnerName);
+                    const lStats = await addLoss(loserName);
+                    io.to(opponent.id).emit('stats_update', wStats);
+                    io.to(player.id).emit('stats_update', lStats);
+                } catch (e) {
+                    console.error('Error updating stats:', e);
+                }
             } else if (gameMode === 'lives') {
                 if (player.lives !== undefined) {
                     player.lives -= 1;
@@ -215,6 +292,16 @@ io.on('connection', (socket: Socket) => {
                         room.winner = opponent.id;
                         await updateRoom(roomId, room);
                         io.to(roomId).emit('game_over', { winner: opponent.id, reason: 'Sense vides! 💔' });
+                        try {
+                            const winnerName = opponent.name;
+                            const loserName = player.name;
+                            const wStats = await addWin(winnerName);
+                            const lStats = await addLoss(loserName);
+                            io.to(opponent.id).emit('stats_update', wStats);
+                            io.to(player.id).emit('stats_update', lStats);
+                        } catch (e) {
+                            console.error('Error updating stats:', e);
+                        }
                     } else {
                         room.turn = opponent.id;
                         room.turnStartTime = Date.now();
