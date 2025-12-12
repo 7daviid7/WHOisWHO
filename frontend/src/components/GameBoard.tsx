@@ -17,9 +17,7 @@ export const GameBoard: React.FC<Props> = ({
     secretCharacter,
     playerColor = 'blue'
 }) => {
-    const boardColor = playerColor === 'red' ? '#e74c3c' : '#3498db';
-    const boardColorDark = playerColor === 'red' ? '#c0392b' : '#2980b9';
-
+    // Real gaming table aesthetic
     return (
         <div style={{ 
             display: 'flex', 
@@ -27,123 +25,160 @@ export const GameBoard: React.FC<Props> = ({
             width: '100%',
             height: '100%',
             overflow: 'hidden',
-            gap: '10px'
+            backgroundColor: '#1a472a',
+            background: 'radial-gradient(circle at 50% 50%, #2d5a3d 0%, #1a2d2a 100%)',
+            padding: '20px',
+            borderRadius: '20px',
+            boxShadow: 'inset 0 0 40px rgba(0,0,0,0.8), 0 20px 60px rgba(0,0,0,0.5)'
         }}>
-            {/* Tablero principal - Part superior */}
+            {/* Gaming Table Surface */}
             <div style={{
-                background: `linear-gradient(135deg, ${boardColor} 0%, ${boardColorDark} 100%)`,
-                padding: '15px',
-                borderRadius: '15px',
-                boxShadow: '0 8px 16px rgba(0,0,0,0.4)',
-                border: '4px solid rgba(0,0,0,0.2)',
-                position: 'relative',
-                flex: 1,
                 display: 'flex',
                 flexDirection: 'column',
-                overflow: 'auto',
-                minHeight: 0
+                justifyContent: 'center',
+                alignItems: 'center',
+                flex: 1,
+                minHeight: 0,
+                gap: '24px',
+                overflow: 'auto'
             }}>
-                {/* Board decorative elements */}
+                {/* Cards Grid - 3-3-2 layout */}
                 <div style={{
-                    position: 'absolute',
-                    top: '-8px',
-                    left: '50%',
-                    transform: 'translateX(-50%)',
-                    backgroundColor: '#FFD700',
-                    padding: '5px 15px',
-                    borderRadius: '8px',
-                    fontSize: '11px',
-                    fontWeight: 'bold',
-                    color: '#2c3e50',
-                    boxShadow: '0 3px 6px rgba(0,0,0,0.3)',
-                    border: '2px solid #DAA520',
-                    zIndex: 1
-                }}>
-                    TAULER DE JOC
-                </div>
-
-                <div style={{
-                    backgroundColor: 'rgba(255,255,255,0.1)',
-                    padding: '10px',
-                    borderRadius: '10px',
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fill, 93px)',
-                    gap: '5px',
-                    justifyContent: 'center',
-                    alignContent: 'start'
-                }}>
-                    {characters.map(char => (
-                        <CharacterCard 
-                            key={char.id} 
-                            character={char} 
-                            eliminated={eliminatedIds.includes(char.id)} 
-                            onClick={() => onToggleEliminate(char.id)} 
-                        />
-                    ))}
-                </div>
-
-                {/* Bottom decoration */}
-                <div style={{
-                    marginTop: 'auto',
-                    paddingTop: '10px',
                     display: 'flex',
-                    justifyContent: 'center',
-                    gap: '8px'
-                }}>
-                    {[1, 2, 3, 4, 5].map(i => (
-                        <div key={i} style={{
-                            width: '30px',
-                            height: '4px',
-                            backgroundColor: 'rgba(255,255,255,0.3)',
-                            borderRadius: '2px'
-                        }} />
-                    ))}
+                    flexDirection: 'column',
+                    gap: '24px',
+                    padding: '20px',
+                    alignItems: 'center'
+                } as any}>
+                    {/* Row 1 - 3 cards */}
+                    <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(3, 1fr)',
+                        gap: '24px',
+                        justifyItems: 'center'
+                    }}>
+                        {characters.slice(0, 3).map((char, index) => (
+                            <div key={char.id} style={{
+                                display: 'flex',
+                                justifyContent: 'center',
+                                alignItems: 'center',
+                                cursor: 'pointer',
+                                filter: eliminatedIds.includes(char.id) ? 'grayscale(100%) opacity(0.5)' : 'none',
+                                transition: 'all 0.3s ease',
+                                transform: `rotate(${(Math.random() - 0.5) * 3}deg) translateY(${(index % 3) * 8}px)`,
+                                transformOrigin: 'center'
+                            }}
+                            onMouseEnter={(e) => {
+                                if (!eliminatedIds.includes(char.id)) {
+                                    e.currentTarget.style.transform = 'scale(1.12) translateY(-12px) rotate(0deg)';
+                                    e.currentTarget.style.filter = 'drop-shadow(0 12px 24px rgba(255,215,0,0.5))';
+                                }
+                            }}
+                            onMouseLeave={(e) => {
+                                e.currentTarget.style.transform = `rotate(${(Math.random() - 0.5) * 3}deg) translateY(${(index % 3) * 8}px)`;
+                                e.currentTarget.style.filter = eliminatedIds.includes(char.id) ? 'grayscale(100%) opacity(0.5)' : 'none';
+                            }}
+                            onClick={() => onToggleEliminate(char.id)}
+                            >
+                                <CharacterCard 
+                                    character={char} 
+                                    eliminated={eliminatedIds.includes(char.id)} 
+                                    onClick={() => {}}
+                                />
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Row 2 - 3 cards */}
+                    <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(3, 1fr)',
+                        gap: '24px',
+                        justifyItems: 'center'
+                    }}>
+                        {characters.slice(3, 6).map((char, index) => (
+                            <div key={char.id} style={{
+                                display: 'flex',
+                                justifyContent: 'center',
+                                alignItems: 'center',
+                                cursor: 'pointer',
+                                filter: eliminatedIds.includes(char.id) ? 'grayscale(100%) opacity(0.5)' : 'none',
+                                transition: 'all 0.3s ease',
+                                transform: `rotate(${(Math.random() - 0.5) * 3}deg) translateY(${(index % 3) * 8}px)`,
+                                transformOrigin: 'center'
+                            }}
+                            onMouseEnter={(e) => {
+                                if (!eliminatedIds.includes(char.id)) {
+                                    e.currentTarget.style.transform = 'scale(1.12) translateY(-12px) rotate(0deg)';
+                                    e.currentTarget.style.filter = 'drop-shadow(0 12px 24px rgba(255,215,0,0.5))';
+                                }
+                            }}
+                            onMouseLeave={(e) => {
+                                e.currentTarget.style.transform = `rotate(${(Math.random() - 0.5) * 3}deg) translateY(${(index % 3) * 8}px)`;
+                                e.currentTarget.style.filter = eliminatedIds.includes(char.id) ? 'grayscale(100%) opacity(0.5)' : 'none';
+                            }}
+                            onClick={() => onToggleEliminate(char.id)}
+                            >
+                                <CharacterCard 
+                                    character={char} 
+                                    eliminated={eliminatedIds.includes(char.id)} 
+                                    onClick={() => {}}
+                                />
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Row 3 - 2 cards centered */}
+                    <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(2, 1fr)',
+                        gap: '24px',
+                        justifyItems: 'center'
+                    }}>
+                        {characters.slice(6, 8).map((char, index) => (
+                            <div key={char.id} style={{
+                                display: 'flex',
+                                justifyContent: 'center',
+                                alignItems: 'center',
+                                cursor: 'pointer',
+                                filter: eliminatedIds.includes(char.id) ? 'grayscale(100%) opacity(0.5)' : 'none',
+                                transition: 'all 0.3s ease',
+                                transform: `rotate(${(Math.random() - 0.5) * 3}deg) translateY(${(index % 3) * 8}px)`,
+                                transformOrigin: 'center'
+                            }}
+                            onMouseEnter={(e) => {
+                                if (!eliminatedIds.includes(char.id)) {
+                                    e.currentTarget.style.transform = 'scale(1.12) translateY(-12px) rotate(0deg)';
+                                    e.currentTarget.style.filter = 'drop-shadow(0 12px 24px rgba(255,215,0,0.5))';
+                                }
+                            }}
+                            onMouseLeave={(e) => {
+                                e.currentTarget.style.transform = `rotate(${(Math.random() - 0.5) * 3}deg) translateY(${(index % 3) * 8}px)`;
+                                e.currentTarget.style.filter = eliminatedIds.includes(char.id) ? 'grayscale(100%) opacity(0.5)' : 'none';
+                            }}
+                            onClick={() => onToggleEliminate(char.id)}
+                            >
+                                <CharacterCard 
+                                    character={char} 
+                                    eliminated={eliminatedIds.includes(char.id)} 
+                                    onClick={() => {}}
+                                />
+                            </div>
+                        ))}
+                    </div>
                 </div>
             </div>
 
-            {/* Carta secreta - Part inferior centrada */}
-            {secretCharacter && (
-                <div style={{
-                    display: 'flex',
-                    justifyContent: 'center',
-                    alignItems: 'center'
-                }}>
-                    <div style={{ 
-                        background: `linear-gradient(135deg, ${boardColor} 0%, ${boardColorDark} 100%)`,
-                        padding: '12px 25px',
-                        borderRadius: '12px',
-                        boxShadow: '0 8px 16px rgba(0,0,0,0.4)',
-                        border: '4px solid #FFD700',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '15px'
-                    }}>
-                        <h3 style={{
-                            color: 'white',
-                            textAlign: 'center',
-                            margin: 0,
-                            textShadow: '2px 2px 4px rgba(0,0,0,0.3)',
-                            fontSize: '1rem',
-                            fontWeight: 'bold'
-                        }}>
-                            ⭐ El teu Personatge Secret:
-                        </h3>
-                        <div style={{
-                            backgroundColor: 'rgba(255,255,255,0.15)',
-                            padding: '8px',
-                            borderRadius: '8px',
-                            display: 'flex',
-                            justifyContent: 'center'
-                        }}>
-                            <CharacterCard 
-                                character={secretCharacter} 
-                                eliminated={false} 
-                                onClick={() => {}} 
-                            />
-                        </div>
-                    </div>
-                </div>
-            )}
+            {/* Decorative felt edge */}
+            <div style={{
+                position: 'absolute',
+                bottom: 0,
+                left: 0,
+                right: 0,
+                height: '4px',
+                background: 'linear-gradient(90deg, rgba(0,0,0,0.3), rgba(255,215,0,0.2), rgba(0,0,0,0.3))',
+                borderRadius: '0 0 20px 20px'
+            }} />
         </div>
     );
 };

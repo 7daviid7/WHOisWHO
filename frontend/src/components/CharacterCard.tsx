@@ -5,9 +5,10 @@ interface Props {
     character: Character;
     eliminated: boolean;
     onClick: () => void;
+    compact?: boolean; // when true, render a smaller version (i.e. for secret card)
 }
 
-export const CharacterCard: React.FC<Props> = ({ character, eliminated, onClick }) => {
+export const CharacterCard: React.FC<Props> = ({ character, eliminated, onClick, compact = false }) => {
     const [isHovered, setIsHovered] = useState(false);
 
     return (
@@ -16,13 +17,13 @@ export const CharacterCard: React.FC<Props> = ({ character, eliminated, onClick 
             onMouseEnter={() => setIsHovered(true)}
             onMouseLeave={() => setIsHovered(false)}
             style={{
-                width: '85px',
-                height: '110px',
-                margin: '4px',
-                perspective: '1000px',
+                width: compact ? '110px' : '160px',
+                height: compact ? '150px' : '210px',
+                margin: '0',
+                perspective: '1200px',
                 cursor: 'pointer',
-                transition: 'transform 0.1s ease',
-                transform: isHovered && !eliminated ? 'scale(1.05)' : 'scale(1)',
+                transition: 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
+                opacity: eliminated ? 0.45 : 1
             }}
         >
             <div style={{
@@ -30,7 +31,7 @@ export const CharacterCard: React.FC<Props> = ({ character, eliminated, onClick 
                 width: '100%',
                 height: '100%',
                 transformStyle: 'preserve-3d',
-                transition: 'transform 0.6s',
+                transition: 'transform 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55)',
                 transform: eliminated ? 'rotateY(180deg)' : 'rotateY(0deg)',
             }}>
                 {/* Front Side */}
@@ -39,46 +40,49 @@ export const CharacterCard: React.FC<Props> = ({ character, eliminated, onClick 
                     width: '100%',
                     height: '100%',
                     backfaceVisibility: 'hidden',
-                    backgroundColor: '#FFD700',
-                    borderRadius: '8px',
-                    padding: '4px',
-                    boxShadow: eliminated ? 'none' : '0 4px 8px rgba(0,0,0,0.3)',
-                    border: '3px solid #DAA520',
+                    background: 'linear-gradient(135deg, #2c3e50 0%, #34495e 100%)',
+                    borderRadius: '12px',
+                    padding: '8px',
+                    boxShadow: '0 8px 20px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.1)',
+                    border: '2px solid rgba(255,255,255,0.1)',
+                    overflow: 'hidden'
                 }}>
                     <div style={{
                         width: '100%',
                         height: '100%',
-                        backgroundColor: 'white',
-                        borderRadius: '4px',
+                        backgroundColor: '#1a252f',
+                        borderRadius: '8px',
                         display: 'flex',
                         flexDirection: 'column',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        padding: '4px',
-                        border: '2px solid #FFA500',
+                        padding: '8px',
+                        gap: '6px'
                     }}>
                         <img 
                             src={character.image} 
                             alt={character.name} 
                             style={{ 
-                                width: '60px', 
-                                height: '60px', 
+                                width: compact ? '80px' : '110px', 
+                                height: compact ? '80px' : '110px', 
                                 objectFit: 'cover', 
-                                borderRadius: '50%',
-                                border: '2px solid #FFD700',
-                                marginBottom: '3px'
+                                borderRadius: compact ? '6px' : '8px',
+                                border: compact ? '2px solid rgba(255,255,255,0.08)' : '3px solid #3498db',
+                                boxShadow: compact ? '0 2px 6px rgba(0,0,0,0.3)' : '0 4px 12px rgba(52, 152, 219, 0.3)'
                             }} 
                         />
                         <div style={{
-                            fontSize: '9px',
-                            fontWeight: 'bold',
-                            color: '#2c3e50',
+                            fontSize: '11px',
+                            fontWeight: '700',
+                            color: '#ecf0f1',
                             textAlign: 'center',
                             overflow: 'hidden',
                             textOverflow: 'ellipsis',
                             whiteSpace: 'nowrap',
                             width: '100%',
-                            padding: '0 2px'
+                            padding: '0 4px',
+                            letterSpacing: '0.5px',
+                            textTransform: 'uppercase'
                         }}>
                             {character.name}
                         </div>
@@ -91,28 +95,31 @@ export const CharacterCard: React.FC<Props> = ({ character, eliminated, onClick 
                     width: '100%',
                     height: '100%',
                     backfaceVisibility: 'hidden',
-                    backgroundColor: '#FFD700',
-                    borderRadius: '8px',
-                    padding: '4px',
-                    boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                    background: 'linear-gradient(135deg, #5b7fd9 0%, #4a6bc9 100%)',
+                    borderRadius: '10px',
+                    padding: '5px',
+                    boxShadow: '0 6px 16px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.2)',
                     transform: 'rotateY(180deg)',
-                    border: '3px solid #DAA520',
+                    border: 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
                 }}>
                     <div style={{
                         width: '100%',
                         height: '100%',
-                        backgroundColor: '#4a4a4a',
-                        borderRadius: '4px',
+                        background: 'linear-gradient(180deg, #6b8fe5 0%, #4a6bc9 100%)',
+                        borderRadius: '6px',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        border: '2px solid #FFA500',
+                        border: 'none',
                     }}>
                         <span style={{
-                            fontSize: '45px',
-                            color: '#FFD700',
-                            fontWeight: 'bold',
-                            textShadow: '2px 2px 4px rgba(0,0,0,0.5)'
+                            fontSize: '50px',
+                            color: '#ffffff',
+                            fontWeight: '900',
+                            textShadow: '0 2px 8px rgba(0,0,0,0.3)'
                         }}>
                             ?
                         </span>
