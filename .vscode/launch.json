@@ -1,0 +1,30 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug Backend",
+      "type": "node",
+      "request": "launch",
+      "skipFiles": [
+        "<node_internals>/**",
+        "${workspaceFolder}/**/node_modules/**/*.js"
+      ],
+      "program": "${workspaceFolder}/backend/src/index.ts",
+      "runtimeArgs": ["-r", "ts-node/register"],
+      "env": {
+        "TS_NODE_TRANSPILE_ONLY": "true"
+      },
+      "cwd": "${workspaceFolder}/backend",
+      "preLaunchTask": "Start Infrastructure",
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Debug Frontend (Chrome)",
+      "type": "chrome",
+      "request": "launch",
+      "url": "http://localhost:5173",
+      "webRoot": "${workspaceFolder}/frontend/src",
+      "preLaunchTask": "Frontend Dev"
+    }
+  ]
+}
