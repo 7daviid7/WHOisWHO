@@ -12,6 +12,8 @@ export const connectRedis = async () => {
   console.log("Connected to Redis");
 };
 
+const ROOM_TTL = 3600; // 1 hour in seconds
+
 export const createRoom = async (
   roomId: string,
   config?: GameConfig
@@ -26,6 +28,8 @@ export const createRoom = async (
   await client.hSet(`room:${roomId}`, {
     data: JSON.stringify(initialState),
   });
+  await client.expire(`room:${roomId}`, ROOM_TTL);
+
   // Add to available rooms list
   await client.sAdd("available_rooms", roomId);
   return initialState;
@@ -45,6 +49,7 @@ export const updateRoom = async (roomId: string, state: GameState) => {
   await client.hSet(`room:${roomId}`, {
     data: JSON.stringify(state),
   });
+  await client.expire(`room:${roomId}`, ROOM_TTL);
 };
 
 export const addPlayerToRoom = async (
@@ -73,6 +78,7 @@ export const setSecretCharacter = async (
   characterId: number
 ) => {
   await client.hSet(`room:${roomId}:secrets`, playerId, characterId.toString());
+  await client.expire(`room:${roomId}:secrets`, ROOM_TTL);
 };
 
 export const getSecretCharacter = async (
