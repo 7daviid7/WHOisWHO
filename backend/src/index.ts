@@ -35,7 +35,10 @@ import * as matchService from './services/matchService'; // Import Service
 dotenv.config();
 
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: true, // Allow all origins reflected
+  credentials: true
+}));
 app.use(express.json());
 
 // Routes
@@ -46,8 +49,9 @@ app.use('/api/matches', matchRoutes);
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: "*",
-    methods: ["GET", "POST"]
+    origin: ["http://localhost:5173", "http://127.0.0.1:5173", "*"],
+    methods: ["GET", "POST"],
+    credentials: true
   }
 });
 
@@ -207,13 +211,19 @@ io.on('connection', (socket: Socket) => {
   });
 
   socket.on('join_room', async ({ roomId, username, config }: { roomId: string, username: string, config?: any }) => {
+    console.log(`[DEBUG] join_room request: roomId=${roomId}, username=${username}, config=${JSON.stringify(config)}`);
     let room = await getRoom(roomId);
     if (!room) {
+      console.log(`[DEBUG] Room ${roomId} not found, creating new room...`);
       room = await createRoom(roomId, config);
+      console.log(`[DEBUG] Room created:`, room);
     } else if (config && !room.config) {
       // Attach config if it was missing
+      console.log(`[DEBUG] Updating room config for ${roomId}`);
       room.config = config;
       await updateRoom(roomId, room);
+    } else {
+      console.log(`[DEBUG] Room found:`, room);
     }
 
     if (room.players.length >= 2) {
@@ -233,7 +243,12 @@ io.on('connection', (socket: Socket) => {
           lives: room.config?.mode === 'lives' ? 2 : undefined
         };
         const updatedRoom = await addPlayerToRoom(roomId, newPlayer);
-        if (updatedRoom) room = updatedRoom;
+        if (updatedRoom) {
+          room = updatedRoom;
+          console.log(`[DEBUG] Player added to room ${roomId}. New state:`, room);
+        } else {
+          console.error(`[DEBUG] Failed to add player to room ${roomId}`);
+        }
       }
     }
 

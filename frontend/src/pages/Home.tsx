@@ -137,7 +137,9 @@ export default function Home({ username }: HomeProps) {
     }, [location.state]);
 
     const joinRoom = (roomId: string, config?: any) => {
+        console.log(`[DEBUG] Connecting to socket...`);
         socket.connect();
+        console.log(`[DEBUG] Emitting join_room: roomId=${roomId}, username=${username}, config=`, config);
         socket.emit('join_room', { roomId, username, config });
     };
 
