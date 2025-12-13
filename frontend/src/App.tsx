@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { socket } from './socket';
 import { Login } from './components/Login';
 import { RoomBrowser } from './components/RoomBrowser';
@@ -22,6 +22,9 @@ function App() {
   const [timeRemaining, setTimeRemaining] = useState<number>(60);
   const [showLogs, setShowLogs] = useState(true);
   const [showRightSidebar, setShowRightSidebar] = useState(true);
+    const [turnPopup, setTurnPopup] = useState<{ visible: boolean; message: string }>({ visible: false, message: '' });
+    const [turnPopupExiting, setTurnPopupExiting] = useState(false);
+    const prevTurnRef = useRef<string | null>(null);
   
   // Question State
   const [selectedAttr, setSelectedAttr] = useState<string>('gender');
@@ -132,6 +135,34 @@ function App() {
         socket.off('stats_update', onStatsUpdate);
     };
   }, []);
+
+    // Show a large popup sliding in from right, stay 3s, slide out
+    useEffect(() => {
+        if (!gameState) return;
+        const prev = prevTurnRef.current;
+        const current = gameState.turn;
+        if (prev !== null && prev !== current) {
+            const isMine = current === socket.id;
+            const message = isMine
+                ? "És el teu torn! Pots preguntar o intentar endevinar."
+                : "Torn del rival. Espera la pregunta o prepara la resposta.";
+            // show
+            setTurnPopup({ visible: true, message });
+            setTurnPopupExiting(false);
+            // after 3s start exit
+            const exitTimer = setTimeout(() => setTurnPopupExiting(true), 3000);
+            // after exit animation (3000+420ms) hide
+            const hideTimer = setTimeout(() => {
+                setTurnPopup({ visible: false, message: '' });
+                setTurnPopupExiting(false);
+            }, 3420);
+            return () => {
+                clearTimeout(exitTimer);
+                clearTimeout(hideTimer);
+            };
+        }
+        prevTurnRef.current = current;
+    }, [gameState?.turn, socket.id]);
 
   const handleLogin = (name: string) => {
       setUsername(name);
@@ -267,6 +298,29 @@ function App() {
             onRestart={restartGame}
           />
       )}
+
+            {turnPopup.visible && (() => {
+                    const isMinePopup = gameState?.turn === socket.id;
+                    const opponentForPopup = gameState?.players.find(p => p.id !== socket.id);
+                    const opponentNameForPopup = opponentForPopup?.name || 'Rival';
+                        return (
+                        <div className={`turn-popup ${isMinePopup ? 'turn-popup--mine' : 'turn-popup--rival'} ${turnPopupExiting ? 'turn-popup--exit' : 'turn-popup--enter'}`}>
+                            <div className="turn-popup__content">
+                                <div className="turn-popup__message">
+                                    {isMinePopup ? (
+                                        <>
+                                            És el <span className="turn-popup__highlight">teu torn</span>! Pots preguntar o intentar endevinar.
+                                        </>
+                                    ) : (
+                                        <>
+                                            Torn del <span className="turn-popup__highlight">rival</span>. Espera la pregunta o prepara la resposta.
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    );
+            })()}
 
       {/* Top Navigation Bar */}
       <div style={{

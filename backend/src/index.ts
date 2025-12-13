@@ -272,7 +272,7 @@ io.on('connection', (socket: Socket) => {
                 room.status = 'finished';
                 room.winner = opponent.id;
                 await updateRoom(roomId, room);
-                io.to(roomId).emit('game_over', { winner: opponent.id, reason: 'Endevinalla incorrecta! ⚡' });
+                io.to(roomId).emit('game_over', { winner: opponent.id, reason: 'El personatge era: '+opponent.secretCharacterId });
                 try {
                     const winnerName = opponent.name;
                     const loserName = player.name;
