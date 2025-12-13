@@ -1,24 +1,34 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { socket } from './socket';
 import { Login } from './components/Login';
 import { RoomBrowser } from './components/RoomBrowser';
 import { WaitingScreen } from './components/WaitingScreen';
 import { GameOverModal } from './components/GameOverModal';
 import { GameBoard } from './components/GameBoard';
+import { CharacterCard } from './components/CharacterCard';
 import { Character, GameState, PredefinedQuestion } from './types';
+import { GameLog } from './components/GameLog';
+import { useGameSounds } from './hooks/useGameSounds';
 
 function App() {
   const [username, setUsername] = useState('');
+  const sounds = useGameSounds();
   const [isConnected, setIsConnected] = useState(socket.connected);
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [characters, setCharacters] = useState<Character[]>([]);
   const [predefinedQuestions, setPredefinedQuestions] = useState<PredefinedQuestion[]>([]);
   const [eliminatedIds, setEliminatedIds] = useState<number[]>([]);
   const [mySecret, setMySecret] = useState<Character | undefined>(undefined);
+    const [opponentSecretCharacter, setOpponentSecretCharacter] = useState<Character | undefined>(undefined);
   const [logs, setLogs] = useState<string[]>([]);
   const [wins, setWins] = useState(0);
   const [losses, setLosses] = useState(0);
   const [timeRemaining, setTimeRemaining] = useState<number>(60);
+  const [showLogs, setShowLogs] = useState(true);
+  const [showRightSidebar, setShowRightSidebar] = useState(true);
+    const [turnPopup, setTurnPopup] = useState<{ visible: boolean; message: string }>({ visible: false, message: '' });
+    const [turnPopupExiting, setTurnPopupExiting] = useState(false);
+    const prevTurnRef = useRef<string | null>(null);
   
   // Question State
   const [selectedAttr, setSelectedAttr] = useState<string>('gender');
@@ -74,6 +84,7 @@ function App() {
     function onGameStarted(room: GameState) {
       setGameState(room);
       setLogs(prev => [...prev, "Partida Començada!"]);
+      sounds.playAlert();
     }
 
     function onReceiveQuestion(data: {question: string, attribute: string, value: any}) {
@@ -83,10 +94,28 @@ function App() {
     function onReceiveAnswer(data: {answer: boolean, attribute: string, value: any, from: string}) {
         const answerText = data.answer ? "SÍ" : "NO";
         setLogs(prev => [...prev, `Resposta: ${answerText}`]);
+        if (data.answer) sounds.playSuccess();
+        else sounds.playError();
     }
 
-    function onGameOver(data: {winner: string, reason: string}) {
+    function onGameOver(data: {winner: string, reason: string, secretCharacter?: Character | null, secrets?: Record<string, Character | null>}) {
         setGameState(prev => prev ? {...prev, status: 'finished', winner: data.winner, reason: data.reason} as any : null);
+        // Prefer secrets map from server. Derive opponent id from the secrets keys to avoid stale `gameState` closure.
+        if (data.secrets) {
+            const keys = Object.keys(data.secrets);
+            // pick the key that is not this client's socket id; fallback to first key
+            const opponentId = keys.find(k => k !== socket.id) || keys[0];
+            setOpponentSecretCharacter(opponentId ? data.secrets[opponentId] || undefined : undefined);
+            return;
+        }
+        if ((data as any).secretCharacter) {
+            setOpponentSecretCharacter((data as any).secretCharacter || undefined);
+        }
+        if (data.winner === socket.id) {
+            sounds.playWin();
+        } else {
+            sounds.playLose();
+        }
     }
 
     function onStatsUpdate(data: {wins: number, losses: number}) {
@@ -97,6 +126,7 @@ function App() {
 
     function onTurnTimeout(data: {playerId: string}) {
         setLogs(prev => [...prev, `⏰ Temps esgotat!`]);
+        sounds.playError();
     }
 
     function onLifeLost(data: {livesRemaining: number}) {
@@ -129,6 +159,35 @@ function App() {
         socket.off('stats_update', onStatsUpdate);
     };
   }, []);
+
+    // Show a large popup sliding in from right, stay 3s, slide out
+    useEffect(() => {
+        if (!gameState) return;
+        const prev = prevTurnRef.current;
+        const current = gameState.turn;
+        if (prev !== null && prev !== current) {
+            const isMine = current === socket.id;
+            const message = isMine
+                ? "És el teu torn! Pots preguntar o intentar endevinar."
+                : "Torn del rival. Espera la pregunta o prepara la resposta.";
+            // show
+            setTurnPopup({ visible: true, message });
+            setTurnPopupExiting(false);
+            // after 3s start exit
+            const exitTimer = setTimeout(() => setTurnPopupExiting(true), 3000);
+            if (isMine) sounds.playAlert();
+            // after exit animation (3000+420ms) hide
+            const hideTimer = setTimeout(() => {
+                setTurnPopup({ visible: false, message: '' });
+                setTurnPopupExiting(false);
+            }, 3420);
+            return () => {
+                clearTimeout(exitTimer);
+                clearTimeout(hideTimer);
+            };
+        }
+        prevTurnRef.current = current;
+    }, [gameState?.turn, socket.id]);
 
   const handleLogin = (name: string) => {
       setUsername(name);
@@ -246,9 +305,9 @@ function App() {
 
   return (
     <div style={{ 
-        padding: '10px', 
+        padding: '0', 
         fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif", 
-        background: 'linear-gradient(to bottom, #ecf0f1 0%, #bdc3c7 100%)', 
+        background: 'linear-gradient(135deg, #0a0e27 0%, #1a1f3a 100%)', 
         minHeight: '100vh',
         maxHeight: '100vh',
         overflow: 'hidden',
@@ -261,550 +320,703 @@ function App() {
             winner={gameState.winner === socket.id ? username : opponentName} 
             isMe={gameState.winner === socket.id}
             reason={(gameState as any).reason || 'Partida Acabada'}
-            onRestart={restartGame}
+                        onRestart={restartGame}
+                        secretCharacter={opponentSecretCharacter}
           />
       )}
 
-      {/* Header Section - Compact */}
-      <div style={{ 
-          background: 'linear-gradient(135deg, #2c3e50 0%, #34495e 100%)',
-          padding: '10px 15px',
-          borderRadius: '10px',
-          marginBottom: '10px',
-          boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
-          border: '2px solid rgba(255,255,255,0.1)',
+            {turnPopup.visible && (() => {
+                    const isMinePopup = gameState?.turn === socket.id;
+                    const opponentForPopup = gameState?.players.find(p => p.id !== socket.id);
+                    const opponentNameForPopup = opponentForPopup?.name || 'Rival';
+                        return (
+                        <div className={`turn-popup ${isMinePopup ? 'turn-popup--mine' : 'turn-popup--rival'} ${turnPopupExiting ? 'turn-popup--exit' : 'turn-popup--enter'}`}>
+                            <div className="turn-popup__content">
+                                <div className="turn-popup__message">
+                                    {isMinePopup ? (
+                                        <>
+                                            És el <span className="turn-popup__highlight">teu torn</span>! Pots preguntar o intentar endevinar.
+                                        </>
+                                    ) : (
+                                        <>
+                                            Torn del <span className="turn-popup__highlight">rival</span>. Espera la pregunta o prepara la resposta.
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    );
+            })()}
+
+      {/* Top Navigation Bar */}
+      <div style={{
+          background: 'linear-gradient(90deg, #0f1729 0%, #1a2847 100%)',
+          padding: '10px 16px',
+          borderBottom: '2px solid rgba(255, 215, 0, 0.3)',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.6)',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: '15px'
+          gap: '20px',
+          flexShrink: 0,
+          zIndex: 100
       }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+          {/* Left Info: Players and Stats */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
               <div>
-                  <h2 style={{ 
+                  <h3 style={{ 
                       color: '#FFD700',
                       margin: 0,
-                      fontSize: '1.2rem',
-                      textShadow: '1px 1px 2px rgba(0,0,0,0.3)'
+                      fontSize: '1rem',
+                      fontWeight: 'bold'
                   }}>
                       🎮 {gameState.roomId}
-                  </h2>
-                  <h3 style={{ 
-                      color: '#ecf0f1', 
-                      margin: '3px 0 0 0',
-                      fontSize: '0.9rem'
-                  }}>
-                      {username} vs {opponentName}
                   </h3>
               </div>
               
+              <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
+                  {/* Your Stats */}
+                  <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '6px 12px',
+                      background: 'rgba(74, 144, 226, 0.2)',
+                      borderRadius: '6px',
+                      border: '1px solid rgba(74, 144, 226, 0.5)'
+                  }}>
+                      <span style={{ color: '#ecf0f1', fontSize: '0.85rem', fontWeight: 'bold' }}>
+                          {username}
+                      </span>
+                      {gameState.config?.mode === 'lives' && (
+                          <span style={{ fontSize: '1rem' }}>
+                              {Array.from({ length: myLives || 0 }).map(() => '❤️').join('')}
+                              {Array.from({ length: 2 - (myLives || 0) }).map(() => '🖤').join('')}
+                          </span>
+                      )}
+                  </div>
+
+                  {/* VS */}
+                  <span style={{ color: '#FFD700', fontWeight: 'bold' }}>VS</span>
+
+                  {/* Opponent Stats */}
+                  <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '6px 12px',
+                      background: 'rgba(231, 76, 60, 0.2)',
+                      borderRadius: '6px',
+                      border: '1px solid rgba(231, 76, 60, 0.5)'
+                  }}>
+                      <span style={{ color: '#ecf0f1', fontSize: '0.85rem', fontWeight: 'bold' }}>
+                          {opponentName}
+                      </span>
+                      {gameState.config?.mode === 'lives' && (
+                          <span style={{ fontSize: '1rem' }}>
+                              {Array.from({ length: opponentLives || 0 }).map(() => '❤️').join('')}
+                              {Array.from({ length: 2 - (opponentLives || 0) }).map(() => '🖤').join('')}
+                          </span>
+                      )}
+                  </div>
+              </div>
+          </div>
+
+          {/* Center: Turn and Timer */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               <div style={{
-                  padding: '8px 15px',
-                  backgroundColor: isMyTurn ? '#27ae60' : '#e74c3c',
-                  borderRadius: '8px',
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
-                  animation: isMyTurn ? 'pulse 2s infinite' : 'none'
+                  padding: '6px 14px',
+                  background: isMyTurn ? 'linear-gradient(135deg, rgba(39, 174, 96, 0.3), rgba(46, 204, 113, 0.3))' : 'linear-gradient(135deg, rgba(149, 165, 166, 0.3), rgba(108, 117, 125, 0.3))',
+                  border: `2px solid ${isMyTurn ? '#27ae60' : '#95a5a6'}`,
+                  borderRadius: '6px',
+                  color: isMyTurn ? '#2ecc71' : '#bdc3c7',
+                  fontWeight: 'bold',
+                  fontSize: '0.9rem',
+                  textAlign: 'center'
               }}>
-                  {gameState.config && (
-                      <div style={{
-                          marginTop: '5px',
-                          display: 'flex',
-                          gap: '8px',
+                  {isMyTurn ? '⏰ TU TORN' : '⌛ TORN RIVAL'}
+              </div>
+
+              <div style={{
+                  fontSize: '1.8rem',
+                  fontWeight: 'bold',
+                  color: timeRemaining <= 10 ? '#e74c3c' : '#FFD700',
+                  textShadow: '0 0 10px rgba(255, 215, 0, 0.5)',
+                  animation: timeRemaining <= 10 ? 'pulse 1s infinite' : 'none',
+                  minWidth: '50px',
+                  textAlign: 'center'
+              }}>
+                  {timeRemaining}s
+              </div>
+
+              {/* Mini timer bar */}
+              <div style={{
+                  width: '80px',
+                  height: '6px',
+                  backgroundColor: 'rgba(255,255,255,0.1)',
+                  borderRadius: '3px',
+                  overflow: 'hidden',
+                  border: '1px solid rgba(255,255,255,0.2)'
+              }}>
+                  <div style={{
+                      height: '100%',
+                      width: `${(timeRemaining / (gameState.turnTimeLimit || 60)) * 100}%`,
+                      backgroundColor: timeRemaining <= 10 ? '#e74c3c' : timeRemaining <= 30 ? '#f39c12' : '#27ae60',
+                      transition: 'width 0.1s linear'
+                  }}></div>
+              </div>
+          </div>
+
+          {/* Right: Game Mode and Game Log */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              {gameState.config && (
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                      <span style={{
+                          backgroundColor: '#9b59b6',
+                          padding: '4px 10px',
+                          borderRadius: '4px',
+                          color: 'white',
+                          fontWeight: 'bold',
                           fontSize: '0.75rem'
                       }}>
-                          <span style={{
-                              backgroundColor: '#9b59b6',
-                              padding: '3px 8px',
-                              borderRadius: '5px',
-                              color: 'white',
-                              fontWeight: 'bold'
-                          }}>
-                              {gameState.config.mode === 'hardcore' && '⚡ HARDCORE'}
-                              {gameState.config.mode === 'lives' && '❤️ VIDES'}
-                          </span>
-                          <span style={{
-                              backgroundColor: '#3498db',
-                              padding: '3px 8px',
-                              borderRadius: '5px',
-                              color: 'white',
-                              fontWeight: 'bold'
-                          }}>
-                              ⏱️ {gameState.config.turnTime}s
-                          </span>
-                      </div>
-                  )}
-                                    {/* Lives Display for Lives Mode */}
-                                    {gameState.config?.mode === 'lives' && (
-                                        <div style={{
-                                            display: 'flex',
-                                            flexDirection: 'column',
-                                            gap: '8px',
-                                            backgroundColor: 'rgba(255,255,255,0.1)',
-                                            padding: '10px 15px',
-                                            borderRadius: '8px'
-                                        }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                <span style={{ color: '#FFD700', fontSize: '0.9rem', fontWeight: 'bold' }}>
-                                                    Tu:
-                                                </span>
-                                                <span style={{ fontSize: '1.2rem' }}>
-                                                    {Array.from({ length: myLives || 0 }).map(() => '❤️').join(' ')}
-                                                    {Array.from({ length: 2 - (myLives || 0) }).map(() => '🖤').join(' ')}
-                                                </span>
-                                            </div>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                <span style={{ color: '#ecf0f1', fontSize: '0.9rem', fontWeight: 'bold' }}>
-                                                    {opponentName}:
-                                                </span>
-                                                <span style={{ fontSize: '1.2rem' }}>
-                                                    {Array.from({ length: opponentLives || 0 }).map(() => '❤️').join(' ')}
-                                                    {Array.from({ length: 2 - (opponentLives || 0) }).map(() => '🖤').join(' ')}
-                                                </span>
-                                            </div>
-                                        </div>
-                                    )}
-                                    <p style={{ 
-                                        fontSize: '1rem', 
-                                        fontWeight: 'bold', 
-                                        color: 'white',
-                                        margin: 0,
-                                        textShadow: '1px 1px 2px rgba(0,0,0,0.3)'
-                                    }}>
-                                        {isMyTurn ? "⏰ EL TEU TORN" : "⌛ TORN RIVAL"}
-                                    </p>
-              </div>
-
-              {/* Timer Display */}
-              <div style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  gap: '5px'
-              }}>
-                  <div style={{
-                      fontSize: '2rem',
-                      fontWeight: 'bold',
-                      color: timeRemaining <= 10 ? '#e74c3c' : '#FFD700',
-                      textShadow: '2px 2px 4px rgba(0,0,0,0.5)',
-                      animation: timeRemaining <= 10 ? 'pulse 1s infinite' : 'none',
-                      minWidth: '70px',
-                      textAlign: 'center'
-                  }}>
-                      {timeRemaining}s
-                  </div>
-                  <div style={{
-                      width: '100px',
-                      height: '8px',
-                      backgroundColor: 'rgba(255,255,255,0.2)',
-                      borderRadius: '4px',
-                      overflow: 'hidden',
-                      border: '1px solid rgba(255,255,255,0.3)'
-                  }}>
-                      <div style={{
-                          height: '100%',
-                          width: `${(timeRemaining / (gameState.turnTimeLimit || 60)) * 100}%`,
-                          backgroundColor: timeRemaining <= 10 ? '#e74c3c' : timeRemaining <= 30 ? '#f39c12' : '#27ae60',
-                          transition: 'width 0.1s linear, background-color 0.3s ease',
-                          boxShadow: timeRemaining <= 10 ? '0 0 10px #e74c3c' : 'none'
-                      }}></div>
-                  </div>
-              </div>
-          </div>
-          
-          {/* Game Log - Compact */}
-          <div style={{ 
-              width: '280px', 
-              backgroundColor: 'white',
-              borderRadius: '8px',
-              boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
-              overflow: 'hidden',
-              border: '2px solid #FFD700'
-          }}>
-              <div style={{
-                  backgroundColor: '#FFD700',
-                  padding: '6px 10px',
-                  borderBottom: '1px solid #DAA520'
-              }}>
-                  <h4 style={{ 
-                      margin: 0, 
-                      color: '#2c3e50',
-                      fontWeight: 'bold',
-                      fontSize: '0.85rem'
-                  }}>
-                      📋 Registre
-                  </h4>
-              </div>
-              <div style={{ 
-                  height: '80px', 
-                  overflowY: 'auto', 
-                  padding: '8px',
-              }}>
-                  {logs.length === 0 ? (
-                      <p style={{ color: '#95a5a6', textAlign: 'center', margin: '10px 0', fontSize: '0.8rem' }}>
-                          No hi ha jugades...
-                      </p>
-                  ) : (
-                      logs.map((l, i) => (
-                          <div key={i} style={{ 
-                              fontSize: '0.75rem', 
-                              marginBottom: '5px',
-                              padding: '5px',
-                              backgroundColor: i % 2 === 0 ? '#f8f9fa' : 'white',
-                              borderRadius: '4px',
-                              borderLeft: '2px solid #3498db'
-                          }}>
-                              {l}
-                          </div>
-                      ))
-                  )}
-              </div>
-          </div>
-      </div>
-
-      {incomingQuestion && (
-          <div style={{ 
-              background: 'linear-gradient(135deg, #f39c12 0%, #f1c40f 100%)', 
-              padding: '15px 20px', 
-              margin: '10px 0', 
-              borderRadius: '10px',
-              boxShadow: '0 4px 10px rgba(0,0,0,0.2)',
-              textAlign: 'center',
-              border: '3px solid #e67e22',
-              animation: 'shake 0.5s',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: '15px'
-          }}>
-              <div style={{
-                  fontSize: '2rem'
-              }}>
-                  ❓
-              </div>
-              <h3 style={{ 
-                  color: '#2c3e50',
-                  fontSize: '1.1rem',
-                  margin: 0,
-                  textShadow: '1px 1px 2px rgba(255,255,255,0.5)',
-                  flex: 1
-              }}>
-                  <strong>El rival pregunta:</strong> {incomingQuestion.question}
-              </h3>
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <button onClick={() => answerQuestion(true)} style={{
-                    padding: '10px 30px',
-                    backgroundColor: '#27ae60',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '8px',
-                    cursor: 'pointer',
-                    fontWeight: 'bold',
-                    fontSize: '1.1rem',
-                    boxShadow: '0 3px 6px rgba(0,0,0,0.2)',
-                    transition: 'all 0.2s',
-                    transform: 'scale(1)'
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
-                onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
-                >
-                    ✓ SÍ
-                </button>
-                <button onClick={() => answerQuestion(false)} style={{
-                    padding: '10px 30px',
-                    backgroundColor: '#c0392b',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '8px',
-                    cursor: 'pointer',
-                    fontWeight: 'bold',
-                    fontSize: '1.1rem',
-                    boxShadow: '0 3px 6px rgba(0,0,0,0.2)',
-                    transition: 'all 0.2s',
-                    transform: 'scale(1)'
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
-                onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
-                >
-                    ✗ NO
-                </button>
-              </div>
-          </div>
-      )}
-
-      {isMyTurn && !incomingQuestion && (
-          <div style={{ 
-              margin: '10px 0', 
-              padding: '12px 15px', 
-              background: 'linear-gradient(135deg, #3498db 0%, #2980b9 100%)',
-              borderRadius: '10px',
-              boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
-              border: '2px solid rgba(255,255,255,0.2)'
-          }}>
-              <div style={{ 
-                  display: 'flex', 
-                  gap: '10px', 
-                  alignItems: 'center', 
-                  flexWrap: 'wrap'
-              }}>
-                <span style={{
-                    color: 'white',
-                    fontWeight: 'bold',
-                    fontSize: '0.95rem',
-                    marginRight: '5px'
-                }}>
-                    💭 Pregunta:
-                </span>
-                <select 
-                    value={selectedAttr} 
-                    onChange={e => setSelectedAttr(e.target.value)}
-                    style={{ 
-                        padding: '8px 12px', 
-                        borderRadius: '6px', 
-                        border: '2px solid #2c3e50',
-                        fontSize: '0.9rem',
-                        fontWeight: 'bold',
-                        backgroundColor: 'white',
-                        cursor: 'pointer'
-                    }}
-                >
-                    <option value="gender">👤 Gènere</option>
-                    <option value="hairColor">💇 Cabell</option>
-                    <option value="eyeColor">👁️ Ulls</option>
-                    <option value="hasBeard">🧔 Barba</option>
-                    <option value="hasGlasses">👓 Ulleres</option>
-                    <option value="hasHat">🎩 Barret</option>
-                </select>
-                
-                {['gender', 'hairColor', 'eyeColor'].includes(selectedAttr) ? (
-                    <input 
-                        type="text" 
-                        placeholder="Valor" 
-                        value={selectedValue} 
-                        onChange={e => setSelectedValue(e.target.value)} 
-                        style={{ 
-                            padding: '8px 12px', 
-                            borderRadius: '6px', 
-                            border: '2px solid #2c3e50',
-                            fontSize: '0.9rem',
-                            minWidth: '150px'
-                        }}
-                    />
-                ) : (
-                    <select 
-                        value={selectedValue} 
-                        onChange={e => setSelectedValue(e.target.value)}
-                        style={{ 
-                            padding: '8px 12px', 
-                            borderRadius: '6px', 
-                            border: '2px solid #2c3e50',
-                            fontSize: '0.9rem',
-                            fontWeight: 'bold',
-                            backgroundColor: 'white',
-                            cursor: 'pointer'
-                        }}
-                    >
-                        <option value="">Selecciona...</option>
-                        <option value="true">✓ Sí</option>
-                        <option value="false">✗ No</option>
-                    </select>
-                )}
-
-                <button onClick={askQuestion} style={{ 
-                    padding: '8px 20px', 
-                    backgroundColor: '#27ae60', 
-                    color: 'white', 
-                    border: 'none', 
-                    borderRadius: '6px', 
-                    cursor: 'pointer',
-                    fontWeight: 'bold',
-                    fontSize: '0.95rem',
-                    boxShadow: '0 3px 6px rgba(0,0,0,0.2)',
-                    transition: 'all 0.2s',
-                    transform: 'scale(1)'
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
-                onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
-                >
-                    ❓ Preguntar
-                </button>
-
-                <button 
-                    onClick={() => setShowPredefinedQuestions(!showPredefinedQuestions)} 
-                    style={{ 
-                        padding: '8px 20px', 
-                        backgroundColor: '#9b59b6', 
-                        color: 'white', 
-                        border: 'none', 
-                        borderRadius: '6px', 
-                        cursor: 'pointer',
-                        fontWeight: 'bold',
-                        fontSize: '0.95rem',
-                        boxShadow: '0 3px 6px rgba(0,0,0,0.2)',
-                        transition: 'all 0.2s',
-                        transform: 'scale(1)'
-                    }}
-                    onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
-                    onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
-                >
-                    📝 Preguntes ràpides
-                </button>
-                
-                <span style={{ 
-                    color: 'white', 
-                    fontSize: '0.8rem',
-                    marginLeft: 'auto',
-                    backgroundColor: 'rgba(255,255,255,0.1)',
-                    padding: '5px 10px',
-                    borderRadius: '5px'
-                }}>
-                    💡 Clica carta per descartar
-                </span>
-              </div>
-
-              {/* Predefined Questions Dropdown */}
-              {showPredefinedQuestions && (
-                  <div style={{
-                      marginTop: '10px',
-                      backgroundColor: 'rgba(255,255,255,0.95)',
-                      borderRadius: '8px',
-                      padding: '10px',
-                      maxHeight: '200px',
-                      overflowY: 'auto',
-                      boxShadow: '0 4px 8px rgba(0,0,0,0.2)'
-                  }}>
-                      <div style={{
-                          display: 'grid',
-                          gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-                          gap: '8px'
-                      }}>
-                          {predefinedQuestions.map(q => (
-                              <button
-                                  key={q.id}
-                                  onClick={() => askPredefinedQuestion(q)}
-                                  style={{
-                                      padding: '10px',
-                                      backgroundColor: '#ecf0f1',
-                                      border: '2px solid #3498db',
-                                      borderRadius: '6px',
-                                      cursor: 'pointer',
-                                      textAlign: 'left',
-                                      fontSize: '0.85rem',
-                                      transition: 'all 0.2s',
-                                      fontWeight: '500',
-                                      color: '#2c3e50'
-                                  }}
-                                  onMouseEnter={(e) => {
-                                      e.currentTarget.style.backgroundColor = '#3498db';
-                                      e.currentTarget.style.color = 'white';
-                                  }}
-                                  onMouseLeave={(e) => {
-                                      e.currentTarget.style.backgroundColor = '#ecf0f1';
-                                      e.currentTarget.style.color = '#2c3e50';
-                                  }}
-                              >
-                                  {q.question}
-                              </button>
-                          ))}
-                      </div>
+                          {gameState.config.mode === 'hardcore' && '⚡ HARDCORE'}
+                          {gameState.config.mode === 'lives' && '❤️ VIDES'}
+                      </span>
                   </div>
               )}
           </div>
-      )}
-
-      <div style={{ 
-          flex: 1, 
-          display: 'flex', 
-          gap: '10px',
-          minHeight: 0,
-          overflow: 'hidden'
-      }}>
-          <GameBoard 
-            characters={characters} 
-            eliminatedIds={eliminatedIds} 
-            onToggleEliminate={(id) => {
-                if (isMyTurn && !incomingQuestion) {
-                    toggleEliminate(id);
-                } else {
-                    toggleEliminate(id);
-                }
-            }}
-            secretCharacter={mySecret}
-            playerColor="blue"
-          />
       </div>
-      
-      {isMyTurn && (
-          <div style={{ 
-              marginTop: '10px', 
-              textAlign: 'center', 
-              padding: '12px 20px',
-              background: 'linear-gradient(135deg, #e67e22 0%, #d35400 100%)',
-              borderRadius: '10px',
-              boxShadow: '0 4px 8px rgba(0,0,0,0.3)',
-              border: '3px solid #c0392b',
+
+      {/* Incoming Question - Modal Overlay */}
+      {incomingQuestion && (
+          <div style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(0,0,0,0.7)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              gap: '15px'
+              zIndex: 1000,
+              backdropFilter: 'blur(3px)'
           }}>
-              <span style={{ fontSize: '1.5rem' }}>🎯</span>
-              <span style={{ 
-                  color: 'white',
-                  fontSize: '1rem',
-                  fontWeight: 'bold',
-                  textShadow: '1px 1px 2px rgba(0,0,0,0.3)'
+              <div style={{
+                  background: 'linear-gradient(135deg, #2c3e50 0%, #34495e 100%)',
+                  padding: '30px 40px',
+                  borderRadius: '16px',
+                  boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
+                  border: '2px solid #FFD700',
+                  textAlign: 'center',
+                  maxWidth: '500px',
+                  animation: 'slideIn 0.3s ease-out'
               }}>
-                  Intent final:
-              </span>
-              <select id="guessSelect" style={{ 
-                  padding: '8px 12px', 
-                  borderRadius: '6px', 
-                  border: '2px solid #2c3e50',
-                  fontSize: '0.95rem',
-                  fontWeight: 'bold',
-                  backgroundColor: 'white',
-                  cursor: 'pointer'
-              }}>
-                  {characters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
-              <button onClick={() => {
-                  const select = document.getElementById('guessSelect') as HTMLSelectElement;
-                  guessCharacter(parseInt(select.value));
-              }} style={{
-                  padding: '8px 25px',
-                  backgroundColor: '#c0392b',
-                  color: 'white',
-                  border: '2px solid #922b21',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                  fontWeight: 'bold',
-                  fontSize: '1rem',
-                  boxShadow: '0 3px 6px rgba(0,0,0,0.3)',
-                  transition: 'all 0.2s',
-                  transform: 'scale(1)'
-              }}
-              onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = 'scale(1.05)';
-                  e.currentTarget.style.backgroundColor = '#a93226';
-              }}
-              onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = 'scale(1)';
-                  e.currentTarget.style.backgroundColor = '#c0392b';
-              }}
-              >
-                  🎲 Endevinar
-              </button>
-              <span style={{
-                  color: '#fff',
-                  fontSize: '0.8rem',
-                  backgroundColor: 'rgba(192,57,43,0.5)',
-                  padding: '5px 10px',
-                  borderRadius: '5px'
-              }}>
-                  ⚠️ Si falles, perds!
-              </span>
+                  <div style={{ fontSize: '3rem', marginBottom: '16px' }}>❓</div>
+                  <h2 style={{
+                      color: '#FFD700',
+                      margin: '0 0 12px 0',
+                      fontSize: '1.2rem',
+                      fontWeight: 'bold'
+                  }}>
+                      El rival pregunta:
+                  </h2>
+                  <p style={{
+                      color: '#ecf0f1',
+                      fontSize: '1.1rem',
+                      margin: '0 0 24px 0',
+                      lineHeight: '1.6'
+                  }}>
+                      {incomingQuestion.question}
+                  </p>
+                  <div style={{ display: 'flex', gap: '15px', justifyContent: 'center' }}>
+                      <button onClick={() => answerQuestion(true)} style={{
+                          padding: '12px 35px',
+                          backgroundColor: '#27ae60',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '8px',
+                          cursor: 'pointer',
+                          fontWeight: 'bold',
+                          fontSize: '1rem',
+                          boxShadow: '0 4px 12px rgba(39, 174, 96, 0.4)',
+                          transition: 'all 0.2s',
+                          transform: 'scale(1)'
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.08)'}
+                      onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                      >
+                          ✓ SÍ
+                      </button>
+                      <button onClick={() => answerQuestion(false)} style={{
+                          padding: '12px 35px',
+                          backgroundColor: '#c0392b',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '8px',
+                          cursor: 'pointer',
+                          fontWeight: 'bold',
+                          fontSize: '1rem',
+                          boxShadow: '0 4px 12px rgba(192, 57, 43, 0.4)',
+                          transition: 'all 0.2s',
+                          transform: 'scale(1)'
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.08)'}
+                      onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                      >
+                          ✗ NO
+                      </button>
+                  </div>
+              </div>
           </div>
       )}
+
+      {/* Main Game Area with 3-column layout */}
+      <div style={{
+          flex: 1,
+          display: 'flex',
+          gap: '12px',
+          padding: '12px',
+          minHeight: 0,
+          overflow: 'hidden'
+      }}>
+          {/* Left Sidebar - Controls */}
+          <div style={{
+              width: '260px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px',
+              overflow: 'auto',
+              flexShrink: 0
+          }}>
+              {/* Turn Controls */}
+              {isMyTurn && !incomingQuestion && (
+                  <div style={{
+                      background: 'linear-gradient(135deg, #1e3a5f 0%, #2a4a7f 100%)',
+                      padding: '14px',
+                      borderRadius: '10px',
+                      border: '2px solid rgba(74, 144, 226, 0.5)',
+                      boxShadow: '0 6px 16px rgba(0,0,0,0.4)'
+                  }}>
+                      <h3 style={{
+                          color: '#FFD700',
+                          margin: '0 0 12px 0',
+                          fontSize: '0.95rem',
+                          fontWeight: 'bold'
+                      }}>
+                          💭 Hacer Pregunta
+                      </h3>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          <select 
+                              value={selectedAttr} 
+                              onChange={e => setSelectedAttr(e.target.value)}
+                              style={{
+                                  padding: '8px 10px',
+                                  borderRadius: '6px',
+                                  border: '1px solid #555',
+                                  fontSize: '0.85rem',
+                                  fontWeight: 'bold',
+                                  backgroundColor: '#2c3e50',
+                                  color: 'white',
+                                  cursor: 'pointer'
+                              }}
+                          >
+                              <option value="gender">👤 Gènere</option>
+                              <option value="hairColor">💇 Cabell</option>
+                              <option value="eyeColor">👁️ Ulls</option>
+                              <option value="hasBeard">🧔 Barba</option>
+                              <option value="hasGlasses">👓 Ulleres</option>
+                              <option value="hasHat">🎩 Barret</option>
+                          </select>
+
+                          {['gender', 'hairColor', 'eyeColor'].includes(selectedAttr) ? (
+                              <input 
+                                  type="text" 
+                                  placeholder="Valor (p.e. Noia, Marró)" 
+                                  value={selectedValue} 
+                                  onChange={e => setSelectedValue(e.target.value)}
+                                  style={{
+                                      padding: '8px 10px',
+                                      borderRadius: '6px',
+                                      border: '1px solid #555',
+                                      fontSize: '0.85rem',
+                                      backgroundColor: '#2c3e50',
+                                      color: '#ecf0f1'
+                                  }}
+                              />
+                          ) : (
+                              <select 
+                                  value={selectedValue} 
+                                  onChange={e => setSelectedValue(e.target.value)}
+                                  style={{
+                                      padding: '8px 10px',
+                                      borderRadius: '6px',
+                                      border: '1px solid #555',
+                                      fontSize: '0.85rem',
+                                      fontWeight: 'bold',
+                                      backgroundColor: '#2c3e50',
+                                      color: 'white',
+                                      cursor: 'pointer'
+                                  }}
+                              >
+                                  <option value="">Selecciona...</option>
+                                  <option value="true">✓ Sí</option>
+                                  <option value="false">✗ No</option>
+                              </select>
+                          )}
+
+                          <button onClick={askQuestion} style={{
+                              padding: '10px',
+                              backgroundColor: '#27ae60',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '6px',
+                              cursor: 'pointer',
+                              fontWeight: 'bold',
+                              fontSize: '0.9rem',
+                              boxShadow: '0 4px 10px rgba(39, 174, 96, 0.3)',
+                              transition: 'all 0.2s',
+                              transform: 'scale(1)'
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
+                          onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                          >
+                              ❓ Preguntar
+                          </button>
+
+                          <button 
+                              onClick={() => setShowPredefinedQuestions(!showPredefinedQuestions)}
+                              style={{
+                                  padding: '10px',
+                                  backgroundColor: '#9b59b6',
+                                  color: 'white',
+                                  border: 'none',
+                                  borderRadius: '6px',
+                                  cursor: 'pointer',
+                                  fontWeight: 'bold',
+                                  fontSize: '0.9rem',
+                                  boxShadow: '0 4px 10px rgba(155, 89, 182, 0.3)',
+                                  transition: 'all 0.2s',
+                                  transform: 'scale(1)'
+                              }}
+                              onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
+                              onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                          >
+                              📝 Preguntes Ràpides
+                          </button>
+                      </div>
+
+                      {/* Predefined Questions Collapse */}
+                      {showPredefinedQuestions && (
+                          <div style={{
+                              marginTop: '10px',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '6px',
+                              maxHeight: '150px',
+                              overflowY: 'auto'
+                          }}>
+                              {predefinedQuestions.slice(0, 5).map(q => (
+                                  <button
+                                      key={q.id}
+                                      onClick={() => askPredefinedQuestion(q)}
+                                      style={{
+                                          padding: '8px',
+                                          backgroundColor: '#34495e',
+                                          border: '1px solid #4a90e2',
+                                          borderRadius: '4px',
+                                          cursor: 'pointer',
+                                          fontSize: '0.75rem',
+                                          color: '#ecf0f1',
+                                          transition: 'all 0.2s',
+                                          textAlign: 'left'
+                                      }}
+                                      onMouseEnter={(e) => {
+                                          e.currentTarget.style.backgroundColor = '#4a90e2';
+                                          e.currentTarget.style.color = 'white';
+                                      }}
+                                      onMouseLeave={(e) => {
+                                          e.currentTarget.style.backgroundColor = '#34495e';
+                                          e.currentTarget.style.color = '#ecf0f1';
+                                      }}
+                                  >
+                                      {q.question.substring(0, 25)}...
+                                  </button>
+                              ))}
+                          </div>
+                      )}
+                  </div>
+              )}
+
+              {/* Guess Final Character */}
+              {isMyTurn && (
+                  <div style={{
+                      background: 'linear-gradient(135deg, #5a3a2a 0%, #7a4a2a 100%)',
+                      padding: '14px',
+                      borderRadius: '10px',
+                      border: '2px solid rgba(230, 126, 34, 0.5)',
+                      boxShadow: '0 6px 16px rgba(0,0,0,0.4)'
+                  }}>
+                      <h3 style={{
+                          color: '#FFD700',
+                          margin: '0 0 10px 0',
+                          fontSize: '0.95rem',
+                          fontWeight: 'bold'
+                      }}>
+                          🎯 Intent Final
+                      </h3>
+
+                      <select id="guessSelect" style={{
+                          width: '100%',
+                          padding: '8px 10px',
+                          borderRadius: '6px',
+                          border: '1px solid #555',
+                          fontSize: '0.85rem',
+                          fontWeight: 'bold',
+                          backgroundColor: '#2c3e50',
+                          color: 'white',
+                          cursor: 'pointer',
+                          marginBottom: '8px'
+                      }}>
+                          {characters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      </select>
+
+                      <button onClick={() => {
+                          const select = document.getElementById('guessSelect') as HTMLSelectElement;
+                          guessCharacter(parseInt(select.value));
+                      }} style={{
+                          width: '100%',
+                          padding: '10px',
+                          backgroundColor: '#c0392b',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          fontWeight: 'bold',
+                          fontSize: '0.9rem',
+                          boxShadow: '0 4px 10px rgba(192, 57, 43, 0.3)',
+                          transition: 'all 0.2s',
+                          transform: 'scale(1)'
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
+                      onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                      >
+                          🎲 Endevinar
+                      </button>
+
+                      <p style={{
+                          color: '#FFD700',
+                          fontSize: '0.7rem',
+                          margin: '8px 0 0 0',
+                          textAlign: 'center',
+                          fontWeight: 'bold'
+                      }}>
+                          ⚠️ Si falles, perds!
+                      </p>
+                  </div>
+              )}
+
+
+            {/* Game Log*/}
+              <div style={{
+                  flex: showLogs ? 1 : '0 0 auto',
+                  minHeight: 0,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  maxHeight: showLogs ? '100%' : '50px',
+                  transition: 'all 0.3s ease',
+                  marginTop: 'auto' // Empeny cap avall
+              }}>
+                   {showLogs ? (
+                       <GameLog logs={logs} />
+                   ) : (
+                       <button 
+                           onClick={() => setShowLogs(true)}
+                           className="btn btn-ghost"
+                           style={{ width: '100%', padding: '8px', fontSize: '0.8rem' }}
+                       >
+                           📜 Mostrar Registre ({logs.length})
+                       </button>
+                   )}
+              </div>
+
+              
+          </div>
+
+          {/* Center - Game Board */}
+          <div style={{
+              flex: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              minWidth: 0,
+              overflow: 'auto'
+          }}>
+              <GameBoard 
+                  characters={characters} 
+                  eliminatedIds={eliminatedIds} 
+                  onToggleEliminate={(id) => {
+                      toggleEliminate(id);
+                  }}
+                  secretCharacter={mySecret}
+                  playerColor="blue"
+              />
+          </div>
+
+          {/* Right Sidebar - Stats & Info */}
+          <div style={{
+              width: showRightSidebar ? '200px' : '40px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px',
+              overflow: 'auto',
+              flexShrink: 0,
+              transition: 'width 0.3s ease',
+              position: 'relative'
+          }}>
+              {/* Toggle button */}
+              <button onClick={() => setShowRightSidebar(!showRightSidebar)} style={{
+                  position: 'absolute',
+                  top: '8px',
+                  right: '4px',
+                  background: 'linear-gradient(135deg, #2a3a5a 0%, #1a2a4a 100%)',
+                  border: '1px solid rgba(100, 150, 200, 0.3)',
+                  color: '#4a90e2',
+                  cursor: 'pointer',
+                  fontSize: '0.9rem',
+                  fontWeight: 'bold',
+                  padding: '6px 6px',
+                  borderRadius: '6px',
+                  zIndex: 10
+              }}>
+                  {showRightSidebar ? '→' : '←'}
+              </button>
+              
+              {showRightSidebar && (
+                  <>
+                  {/* Player Stats */}
+              <div style={{
+                  background: 'linear-gradient(135deg, #1e4620 0%, #2a5a2a 100%)',
+                  padding: '12px',
+                  borderRadius: '10px',
+                  border: '1px solid rgba(46, 204, 113, 0.3)',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
+              }}>
+                  <h4 style={{
+                      color: '#2ecc71',
+                      margin: '0 0 10px 0',
+                      fontSize: '0.85rem',
+                      fontWeight: 'bold'
+                  }}>
+                      📊 Estadístiques
+                  </h4>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <div style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          fontSize: '0.8rem',
+                          color: '#ecf0f1'
+                      }}>
+                          <span>Victòries:</span>
+                          <span style={{ fontWeight: 'bold', color: '#2ecc71' }}>{wins}</span>
+                      </div>
+                      <div style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          fontSize: '0.8rem',
+                          color: '#ecf0f1'
+                      }}>
+                          <span>Derrotes:</span>
+                          <span style={{ fontWeight: 'bold', color: '#e74c3c' }}>{losses}</span>
+                      </div>
+                      <div style={{
+                          height: '1px',
+                          backgroundColor: 'rgba(255,255,255,0.1)',
+                          margin: '5px 0'
+                      }}></div>
+                      <div style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          fontSize: '0.8rem',
+                          color: '#ecf0f1',
+                          fontWeight: 'bold'
+                      }}>
+                          <span>Win Rate:</span>
+                          <span style={{ color: '#FFD700' }}>
+                              {wins + losses === 0 ? '0%' : ((wins / (wins + losses)) * 100).toFixed(1) + '%'}
+                          </span>
+                      </div>
+                  </div>
+              </div>
+
+              {/* Game Status */}
+              <div style={{
+                  background: 'linear-gradient(135deg, #2a3a5a 0%, #1a2a4a 100%)',
+                  padding: '12px',
+                  borderRadius: '10px',
+                  border: '1px solid rgba(100, 150, 200, 0.3)',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
+              }}>
+                  <h4 style={{
+                      color: '#4a90e2',
+                      margin: '0 0 10px 0',
+                      fontSize: '0.85rem',
+                      fontWeight: 'bold'
+                  }}>
+                      ⚙️ Configuració
+                  </h4>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <div style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          fontSize: '0.75rem',
+                          color: '#bdc3c7'
+                      }}>
+                          <span>Modo:</span>
+                          <span style={{ fontWeight: 'bold', color: '#FFD700' }}>
+                              {gameState.config?.mode === 'hardcore' ? '⚡ Hardcore' : '❤️ Vides'}
+                          </span>
+                      </div>
+                      <div style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          fontSize: '0.75rem',
+                          color: '#bdc3c7'
+                      }}>
+                          <span>Temps/torn:</span>
+                          <span style={{ fontWeight: 'bold', color: '#FFD700' }}>
+                              {gameState.config?.turnTime}s
+                          </span>
+                      </div>
+                  </div>
+              </div>
+
+              {/* Secret Card under Config */}
+              {mySecret && (
+                  <div style={{
+                      background: 'linear-gradient(135deg, #2b2b3a 0%, #1e1f2e 100%)',
+                      padding: '12px',
+                      borderRadius: '10px',
+                      border: '1px solid rgba(255,255,255,0.06)',
+                      boxShadow: '0 4px 10px rgba(0,0,0,0.2)',
+                      minHeight: 0,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      overflow: 'hidden'
+                  }}>
+                      <h4 style={{ color: '#FFD700', margin: '0 0 8px 0', fontSize: '0.85rem', fontWeight: 'bold' }}>
+                          🔒 Carta Secreta
+                      </h4>
+                      <div style={{ display: 'flex', justifyContent: 'center', overflow: 'hidden' }}>
+                          <div style={{ width: '110px', height: '150px', minHeight: 0 }}>
+                              <CharacterCard compact character={mySecret} eliminated={false} onClick={() => {}} />
+                          </div>
+                      </div>
+                  </div>
+              )}</>
+              )}
+          </div>
+      </div>
     </div>
   );
 }
