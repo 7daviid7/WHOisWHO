@@ -100,21 +100,7 @@ export default function Friends({ username }: FriendsProps) {
 
     // ...
 
-    return (
-        <div style={{ padding: '30px', maxWidth: '900px', margin: '0 auto', fontFamily: "'Segoe UI', sans-serif" }}>
-            {showRoomConfig && (
-                <RoomConfig
-                    onCreateRoom={handleCreateInvite}
-                    onCancel={() => setShowRoomConfig(false)}
-                />
-            )}
 
-            <h1 style={{ color: '#2c3e50', marginBottom: '30px', fontSize: '2rem' }}>Gestió d'Amics</h1>
-
-            <div style={{ display: 'flex', gap: '5px', marginBottom: '30px', borderBottom: '1px solid #e0e0e0' }}>
-                <div onClick={() => setActiveTab('list')} style={tabStyle('list')}>Els meus amics</div>
-                <div onClick={() => setActiveTab('search')} style={tabStyle('search')}>Cercar Nous</div>
-                <div onClick={() => setActiveTab('requests')} style={tabStyle('requests')}>
 
     // Polling for friends list to keep it fresh initially
     useEffect(() => {
@@ -184,23 +170,7 @@ export default function Friends({ username }: FriendsProps) {
                     setShowRoomConfig(true);
     };
 
-    const handleCreateInvite = (roomName: string, config: any) => {
-        if (!inviteTarget) return;
 
-                    // Auto-join my own created room/wait for acceptance
-                    socket.emit('join_room', {roomId: roomName, username, config });
-
-                    // Send actual invite
-                    socket.emit('send_invite', {
-                        from: username,
-                    to: inviteTarget.username,
-                    roomId: roomName,
-                    config
-        });
-
-                    setShowRoomConfig(false);
-                    setInvitationStatus(`⏳ Esperant resposta de ${inviteTarget.username}...`);
-    };
 
     const tabStyle = (tab: string) => ({
                         padding: '12px 24px',
