@@ -10,7 +10,13 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = "postgresql://admin:admin123@localhost:5432/whoiswho?schema=public"
+  url      = env("DATABASE_URL")
+}
+
+enum FriendshipStatus {
+  pending
+  accepted
+  blocked
 }
 
 model User {
@@ -19,6 +25,29 @@ model User {
   password  String
   createdAt DateTime @default(now())
   stats     Stats?
+  
+  // Relaciones de amistad
+  friendsInitiated UserFriend[] @relation("UserFriendsInitiator")
+  friendsReceived  UserFriend[] @relation("UserFriendsReceiver")
+}
+
+model UserFriend {
+  id        Int              @id @default(autoincrement())
+  userId    Int              // Usuario que envía/inicia la solicitud
+  friendId  Int              // Usuario que recibe la solicitud
+  status    FriendshipStatus @default(pending)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  // Relaciones
+  user   User @relation("UserFriendsInitiator", fields: [userId], references: [id], onDelete: Cascade)
+  friend User @relation("UserFriendsReceiver", fields: [friendId], references: [id], onDelete: Cascade)
+
+  // Constraints
+  @@unique([userId, friendId])
+  @@index([friendId])
+  @@index([userId, status])
+  @@index([friendId, status])
 }
 
 model Stats {
