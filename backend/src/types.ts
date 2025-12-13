@@ -45,3 +45,12 @@ export interface GameState {
   turnTimeLimit?: number; // time limit in seconds (default 60)
   config?: GameConfig; // game configuration
 }
+
+export type PowerUpType = 'reveal_trait' | 'extra_time' | 'auto_eliminate';
+
+export interface PowerUp {
+  type: PowerUpType;
+  name: string;
+  description: string;
+  uses: number;
+}
