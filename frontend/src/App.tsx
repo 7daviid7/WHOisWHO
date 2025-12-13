@@ -16,6 +16,7 @@ function App() {
   const [predefinedQuestions, setPredefinedQuestions] = useState<PredefinedQuestion[]>([]);
   const [eliminatedIds, setEliminatedIds] = useState<number[]>([]);
   const [mySecret, setMySecret] = useState<Character | undefined>(undefined);
+    const [opponentSecretCharacter, setOpponentSecretCharacter] = useState<Character | undefined>(undefined);
   const [logs, setLogs] = useState<string[]>([]);
   const [wins, setWins] = useState(0);
   const [losses, setLosses] = useState(0);
@@ -91,8 +92,19 @@ function App() {
         setLogs(prev => [...prev, `Resposta: ${answerText}`]);
     }
 
-    function onGameOver(data: {winner: string, reason: string}) {
+    function onGameOver(data: {winner: string, reason: string, secretCharacter?: Character | null, secrets?: Record<string, Character | null>}) {
         setGameState(prev => prev ? {...prev, status: 'finished', winner: data.winner, reason: data.reason} as any : null);
+        // Prefer secrets map from server. Derive opponent id from the secrets keys to avoid stale `gameState` closure.
+        if (data.secrets) {
+            const keys = Object.keys(data.secrets);
+            // pick the key that is not this client's socket id; fallback to first key
+            const opponentId = keys.find(k => k !== socket.id) || keys[0];
+            setOpponentSecretCharacter(opponentId ? data.secrets[opponentId] || undefined : undefined);
+            return;
+        }
+        if ((data as any).secretCharacter) {
+            setOpponentSecretCharacter((data as any).secretCharacter || undefined);
+        }
     }
 
     function onStatsUpdate(data: {wins: number, losses: number}) {
@@ -295,7 +307,8 @@ function App() {
             winner={gameState.winner === socket.id ? username : opponentName} 
             isMe={gameState.winner === socket.id}
             reason={(gameState as any).reason || 'Partida Acabada'}
-            onRestart={restartGame}
+                        onRestart={restartGame}
+                        secretCharacter={opponentSecretCharacter}
           />
       )}
 

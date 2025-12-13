@@ -3,6 +3,7 @@ import http from 'http';
 import { Server, Socket } from 'socket.io';
 import cors from 'cors';
 import dotenv from 'dotenv';
+// @ts-expect-error No type definitions available
 import bcrypt from 'bcryptjs';
 import { connectRedis, createRoom, getRoom, addPlayerToRoom, updateRoom, setSecretCharacter, getSecretCharacter, deleteRoom, getAvailableRooms } from './services/redisService';
 import { setUser, getUser } from './services/redisService';
@@ -162,8 +163,10 @@ io.on('connection', (socket: Socket) => {
         // Send current stats to players who are connected
         try {
             for (const p of room.players) {
-                const s = await getUserStats(p.name);
-                io.to(p.id).emit('stats_update', s);
+                if (p.name) {
+                    const s = await getUserStats(p.name);
+                    io.to(p.id).emit('stats_update', s);
+                }
             }
         } catch (e) {
             console.error('Error sending stats on join:', e);
@@ -251,15 +254,24 @@ io.on('connection', (socket: Socket) => {
             room.status = 'finished';
             room.winner = socket.id;
             await updateRoom(roomId, room);
-            io.to(roomId).emit('game_over', { winner: socket.id, reason: 'Encertat! 🎉' });
+            // include secrets map for both players so each client can pick their rival's secret
+            const secrets: Record<string, any> = {};
+            for (const p of room.players) {
+                const sid = p.id;
+                const sidSecretId = await getSecretCharacter(roomId, sid);
+                secrets[sid] = characters.find(c => c.id === sidSecretId) || null;
+            }
+            io.to(roomId).emit('game_over', { winner: socket.id, reason: 'Encertat! 🎉', secrets });
             try {
                 const winnerName = player.name;
                 const loserName = opponent.name;
-                const wStats = await addWin(winnerName);
-                const lStats = await addLoss(loserName);
-                // Emit updated stats to both players
-                io.to(player.id).emit('stats_update', wStats);
-                io.to(opponent.id).emit('stats_update', lStats);
+                if (winnerName && loserName) {
+                    const wStats = await addWin(winnerName);
+                    const lStats = await addLoss(loserName);
+                    // Emit updated stats to both players
+                    io.to(player.id).emit('stats_update', wStats);
+                    io.to(opponent.id).emit('stats_update', lStats);
+                }
             } catch (e) {
                 console.error('Error updating stats:', e);
             }
@@ -267,19 +279,28 @@ io.on('connection', (socket: Socket) => {
             // Wrong guess - Handle based on game mode
             const gameMode = room.config?.mode || 'hardcore';
 
-            if (gameMode === 'hardcore') {
+                if (gameMode === 'hardcore') {
                 clearTurnTimer(roomId);
                 room.status = 'finished';
                 room.winner = opponent.id;
                 await updateRoom(roomId, room);
-                io.to(roomId).emit('game_over', { winner: opponent.id, reason: 'El personatge era: '+opponent.secretCharacterId });
+                    // include secrets for both players
+                    const secrets: Record<string, any> = {};
+                    for (const p of room.players) {
+                        const sid = p.id;
+                        const sidSecretId = await getSecretCharacter(roomId, sid);
+                        secrets[sid] = characters.find(c => c.id === sidSecretId) || null;
+                    }
+                    io.to(roomId).emit('game_over', { winner: opponent.id, reason: 'El personatge era: '+(secrets[opponent.id] ? secrets[opponent.id].name : (await getSecretCharacter(roomId, opponent.id))), secrets });
                 try {
                     const winnerName = opponent.name;
                     const loserName = player.name;
-                    const wStats = await addWin(winnerName);
-                    const lStats = await addLoss(loserName);
-                    io.to(opponent.id).emit('stats_update', wStats);
-                    io.to(player.id).emit('stats_update', lStats);
+                    if (winnerName && loserName) {
+                        const wStats = await addWin(winnerName);
+                        const lStats = await addLoss(loserName);
+                        io.to(opponent.id).emit('stats_update', wStats);
+                        io.to(player.id).emit('stats_update', lStats);
+                    }
                 } catch (e) {
                     console.error('Error updating stats:', e);
                 }
@@ -291,14 +312,22 @@ io.on('connection', (socket: Socket) => {
                         room.status = 'finished';
                         room.winner = opponent.id;
                         await updateRoom(roomId, room);
-                        io.to(roomId).emit('game_over', { winner: opponent.id, reason: 'Sense vides! 💔' });
+                        const secrets: Record<string, any> = {};
+                        for (const p of room.players) {
+                            const sid = p.id;
+                            const sidSecretId = await getSecretCharacter(roomId, sid);
+                            secrets[sid] = characters.find(c => c.id === sidSecretId) || null;
+                        }
+                        io.to(roomId).emit('game_over', { winner: opponent.id, reason: 'Sense vides! 💔', secrets });
                         try {
                             const winnerName = opponent.name;
                             const loserName = player.name;
-                            const wStats = await addWin(winnerName);
-                            const lStats = await addLoss(loserName);
-                            io.to(opponent.id).emit('stats_update', wStats);
-                            io.to(player.id).emit('stats_update', lStats);
+                            if (winnerName && loserName) {
+                                const wStats = await addWin(winnerName);
+                                const lStats = await addLoss(loserName);
+                                io.to(opponent.id).emit('stats_update', wStats);
+                                io.to(player.id).emit('stats_update', lStats);
+                            }
                         } catch (e) {
                             console.error('Error updating stats:', e);
                         }

@@ -1,13 +1,15 @@
 import React from 'react';
+import { Character } from '../types';
 
 interface Props {
   winner: string;
   isMe: boolean;
   reason: string;
   onRestart: () => void;
+  secretCharacter?: Character | null;
 }
 
-export const GameOverModal: React.FC<Props> = ({ winner, isMe, reason, onRestart }) => {
+export const GameOverModal: React.FC<Props> = ({ winner, isMe, reason, onRestart, secretCharacter }) => {
   return (
     <div className="gameover-overlay">
       <div className={`gameover-card ${isMe ? 'gameover--win' : 'gameover--lose'}`} role="dialog" aria-modal="true">
@@ -20,6 +22,9 @@ export const GameOverModal: React.FC<Props> = ({ winner, isMe, reason, onRestart
 
         <div className="gameover-body">
           <p className="gameover-reason">{reason}</p>
+          {secretCharacter && (
+            <p className="gameover-secret">🕵️ Carta secreta del rival: <strong className="gameover-winner-name">{secretCharacter.name}</strong></p>
+          )}
           <p className="gameover-winner">🏅 Guanyador: <strong className="gameover-winner-name">{winner}</strong></p>
         </div>
 
