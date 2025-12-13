@@ -1,16 +1,32 @@
-import express, { Request, Response } from 'express';
-import http from 'http';
-import { Server, Socket } from 'socket.io';
-import cors from 'cors';
-import dotenv from 'dotenv';
-// @ts-expect-error No type definitions available
-import bcrypt from 'bcryptjs';
-import { connectRedis, createRoom, getRoom, addPlayerToRoom, updateRoom, setSecretCharacter, getSecretCharacter, deleteRoom, getAvailableRooms } from './services/redisService';
-import { setUser, getUser } from './services/redisService';
-import { addWin, addLoss, getUserStats } from './services/redisService';
-import { characters } from './data/characters';
-import { predefinedQuestions } from './data/predefinedQuestions';
-import { GameState, Character } from './types';
+import express, { Request, Response } from "express";
+import http from "http";
+import { Server, Socket } from "socket.io";
+import cors from "cors";
+import dotenv from "dotenv";
+import bcrypt from "bcryptjs";
+import {
+  connectRedis,
+  createRoom,
+  getRoom,
+  addPlayerToRoom,
+  updateRoom,
+  setSecretCharacter,
+  getSecretCharacter,
+  deleteRoom,
+  getAvailableRooms,
+  addOnlineUser,
+  removeOnlineUser,
+} from "./services/redisService";
+import {
+  createUser,
+  findUser,
+  getStats,
+  incrementWin,
+  incrementLoss,
+} from "./services/userService";
+import { characters } from "./data/characters";
+import { predefinedQuestions } from "./data/predefinedQuestions";
+import { GameState, Character } from "./types";
 
 dotenv.config();
 
@@ -28,6 +44,8 @@ const io = new Server(server, {
 
 // Store turn timers
 const turnTimers = new Map<string, NodeJS.Timeout>();
+// Store player room mapping for quick lookup on disconnect
+const playerRooms = new Map<string, string>();
 
 // Turn time limit in seconds
 const TURN_TIME_LIMIT = 60; // default fallback
@@ -80,10 +98,11 @@ app.post('/api/register', async (req: Request, res: Response) => {
     const { username, password } = req.body;
     if (!username || !password) return res.status(400).json({ error: 'Missing username or password' });
     try {
-        const existing = await getUser(username);
+        const existing = await findUser(username);
         if (existing) return res.status(409).json({ error: 'User already exists' });
         const hash = await bcrypt.hash(password, 10);
-        await setUser(username, hash);
+        await createUser(username, hash);
+        await addOnlineUser(username);
         return res.json({ ok: true });
     } catch (err) {
         console.error('Register error', err);
@@ -95,10 +114,11 @@ app.post('/api/login', async (req: Request, res: Response) => {
     const { username, password } = req.body;
     if (!username || !password) return res.status(400).json({ error: 'Missing username or password' });
     try {
-        const hash = await getUser(username);
-        if (!hash) return res.status(401).json({ error: 'Invalid credentials' });
-        const ok = await bcrypt.compare(password, hash);
+        const user = await findUser(username);
+        if (!user) return res.status(401).json({ error: 'Invalid credentials' });
+        const ok = await bcrypt.compare(password, user.password);
         if (!ok) return res.status(401).json({ error: 'Invalid credentials' });
+        await addOnlineUser(username);
         return res.json({ ok: true, username });
     } catch (err) {
         console.error('Login error', err);
@@ -111,7 +131,7 @@ app.get('/api/stats/:username', async (req: Request, res: Response) => {
     const username = req.params.username;
     if (!username) return res.status(400).json({ error: 'Missing username' });
     try {
-        const stats = await getUserStats(username);
+        const stats = await getStats(username);
         return res.json(stats);
     } catch (err) {
         console.error('Stats error', err);
@@ -159,12 +179,13 @@ io.on('connection', (socket: Socket) => {
         }
 
         socket.join(roomId);
+        playerRooms.set(socket.id, roomId);
         io.to(roomId).emit('room_update', room);
         // Send current stats to players who are connected
         try {
             for (const p of room.players) {
                 if (p.name) {
-                    const s = await getUserStats(p.name);
+                    const s = await getStats(p.name);
                     io.to(p.id).emit('stats_update', s);
                 }
             }
@@ -266,11 +287,11 @@ io.on('connection', (socket: Socket) => {
                 const winnerName = player.name;
                 const loserName = opponent.name;
                 if (winnerName && loserName) {
-                    const wStats = await addWin(winnerName);
-                    const lStats = await addLoss(loserName);
+                    const wStats = await incrementWin(winnerName);
+                    const lStats = await incrementLoss(loserName);
                     // Emit updated stats to both players
-                    io.to(player.id).emit('stats_update', wStats);
-                    io.to(opponent.id).emit('stats_update', lStats);
+                    if (wStats) io.to(player.id).emit('stats_update', wStats);
+                    if (lStats) io.to(opponent.id).emit('stats_update', lStats);
                 }
             } catch (e) {
                 console.error('Error updating stats:', e);
@@ -296,10 +317,10 @@ io.on('connection', (socket: Socket) => {
                     const winnerName = opponent.name;
                     const loserName = player.name;
                     if (winnerName && loserName) {
-                        const wStats = await addWin(winnerName);
-                        const lStats = await addLoss(loserName);
-                        io.to(opponent.id).emit('stats_update', wStats);
-                        io.to(player.id).emit('stats_update', lStats);
+                        const wStats = await incrementWin(winnerName);
+                        const lStats = await incrementLoss(loserName);
+                        if (wStats) io.to(opponent.id).emit('stats_update', wStats);
+                        if (lStats) io.to(player.id).emit('stats_update', lStats);
                     }
                 } catch (e) {
                     console.error('Error updating stats:', e);
@@ -323,10 +344,10 @@ io.on('connection', (socket: Socket) => {
                             const winnerName = opponent.name;
                             const loserName = player.name;
                             if (winnerName && loserName) {
-                                const wStats = await addWin(winnerName);
-                                const lStats = await addLoss(loserName);
-                                io.to(opponent.id).emit('stats_update', wStats);
-                                io.to(player.id).emit('stats_update', lStats);
+                                const wStats = await incrementWin(winnerName);
+                                const lStats = await incrementLoss(loserName);
+                                if (wStats) io.to(opponent.id).emit('stats_update', wStats);
+                                if (lStats) io.to(player.id).emit('stats_update', lStats);
                             }
                         } catch (e) {
                             console.error('Error updating stats:', e);
@@ -344,10 +365,63 @@ io.on('connection', (socket: Socket) => {
         }
     });
 
-    socket.on('disconnect', () => {
+    socket.on('disconnect', async () => {
         console.log('User disconnected:', socket.id);
-        // Handle disconnection logic (pause game, declare winner, etc.)
-        // For simplicity, we might just leave it or clean up empty rooms
+        const roomId = playerRooms.get(socket.id);
+        if (roomId) {
+            try {
+                const room = await getRoom(roomId);
+                if (room) {
+                    // Remove player from online users
+                    const playerToRemove = room.players.find((p) => p.id === socket.id);
+                    if (playerToRemove && playerToRemove.name) {
+                        await removeOnlineUser(playerToRemove.name);
+                    }
+                    room.players = room.players.filter((p) => p.id !== socket.id);
+
+                    if (room.players.length === 0) {
+                        // Room is empty, delete it
+                        console.log(`Room ${roomId} empty, deleting...`);
+                        await deleteRoom(roomId);
+                        clearTurnTimer(roomId);
+                    } else {
+                        // One player left
+                        // If game was playing, declare remaining player as winner
+                        if (room.status === "playing") {
+                            room.status = "finished";
+                            const winner = room.players[0];
+                            room.winner = winner.id;
+                            room.turn = ""; // No turn
+
+                            await updateRoom(roomId, room);
+                            clearTurnTimer(roomId);
+
+                            io.to(roomId).emit("game_over", {
+                                winner: winner.id,
+                                reason: "El rival ha abandonat la partida 🏃‍♂️💨",
+                            });
+
+                            // Update stats
+                            try {
+                                if (winner.name) {
+                                    const wStats = await incrementWin(winner.name);
+                                    if (wStats) io.to(winner.id).emit("stats_update", wStats);
+                                }
+                            } catch (e) {
+                                console.error("Error updating stats on disconnect:", e);
+                            }
+                        } else {
+                            // If waiting, just update room
+                            await updateRoom(roomId, room);
+                            io.to(roomId).emit("room_update", room);
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error("Error handling disconnect:", error);
+            }
+        }
+        playerRooms.delete(socket.id);
     });
 });
 
