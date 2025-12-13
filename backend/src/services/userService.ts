@@ -23,6 +23,14 @@ export const findUser = async (username: string) => {
   });
 };
 
+// NEW: Update user details
+export const updateUser = async (id: number, data: { username?: string, password?: string }) => {
+  return await prisma.user.update({
+    where: { id },
+    data
+  });
+};
+
 export const incrementWin = async (username: string) => {
   const user = await prisma.user.findUnique({ where: { username } });
   if (!user) return null;

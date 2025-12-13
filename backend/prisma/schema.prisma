@@ -29,6 +29,9 @@ model User {
   // Relaciones de amistad
   friendsInitiated UserFriend[] @relation("UserFriendsInitiator")
   friendsReceived  UserFriend[] @relation("UserFriendsReceiver")
+
+  // Historial de Partidas
+  matches   MatchLog[]
 }
 
 model UserFriend {
@@ -56,4 +59,19 @@ model Stats {
   losses Int  @default(0)
   userId Int  @unique
   user   User @relation(fields: [userId], references: [id])
+}
+
+model MatchLog {
+  id           Int      @id @default(autoincrement())
+  userId       Int
+  opponentName String
+  result       String   // WIN, LOSS, DRAW
+  turns        Int
+  mode         String   // hardcore, etc.
+  createdAt    DateTime @default(now())
+  
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
 }

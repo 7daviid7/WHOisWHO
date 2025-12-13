@@ -1,16 +1,22 @@
 import React, { useEffect, useState } from 'react';
+import { useLocation, useOutletContext } from 'react-router-dom';
 import { socket } from '../socket';
 import { RoomBrowser } from '../components/RoomBrowser';
 import { WaitingScreen } from '../components/WaitingScreen';
 import { GameOverModal } from '../components/GameOverModal';
-import { GameBoard } from '../components/GameBoard';
+import { GameBoard } from '../components/GameBoard'; // We might replace this with inline grid
 import { Character, GameState, PredefinedQuestion } from '../types';
+import { LayoutContextType } from '../components/Layout';
+import './Home.css';
 
 interface HomeProps {
     username: string;
 }
 
 export default function Home({ username }: HomeProps) {
+    const location = useLocation();
+    const { setSidebarHidden } = useOutletContext<LayoutContextType>();
+
     const [isConnected, setIsConnected] = useState(socket.connected);
     const [gameState, setGameState] = useState<GameState | null>(null);
     const [characters, setCharacters] = useState<Character[]>([]);
@@ -30,6 +36,15 @@ export default function Home({ username }: HomeProps) {
     // Incoming Question State
     const [incomingQuestion, setIncomingQuestion] = useState<{ question: string, attribute: string, value: any } | null>(null);
 
+    // Hide sidebar when game is active
+    useEffect(() => {
+        if (gameState && gameState.status === 'playing') {
+            setSidebarHidden(true);
+        } else {
+            setSidebarHidden(false);
+        }
+    }, [gameState?.status, setSidebarHidden]);
+
     // Timer effect
     useEffect(() => {
         if (!gameState || gameState.status !== 'playing' || !gameState.turnStartTime || !gameState.turnTimeLimit) {
@@ -42,68 +57,35 @@ export default function Home({ username }: HomeProps) {
             setTimeRemaining(remaining);
         };
 
-        updateTimer(); // Initial update
-        const interval = setInterval(updateTimer, 100); // Update every 100ms for smooth countdown
-
+        updateTimer();
+        const interval = setInterval(updateTimer, 100);
         return () => clearInterval(interval);
     }, [gameState?.turnStartTime, gameState?.turn, gameState?.status]);
 
     useEffect(() => {
-        fetch('/api/characters')
-            .then(res => res.json())
-            .then(data => setCharacters(data));
+        fetch('/api/characters').then(res => res.json()).then(data => setCharacters(data));
+        fetch('/api/predefined-questions').then(res => res.json()).then(data => setPredefinedQuestions(data));
 
-        fetch('/api/predefined-questions')
-            .then(res => res.json())
-            .then(data => setPredefinedQuestions(data));
-
-        function onConnect() {
-            setIsConnected(true);
-        }
-
-        function onDisconnect() {
-            setIsConnected(false);
-        }
-
-        function onRoomUpdate(room: GameState) {
-            setGameState(room);
-        }
-
-        function onSecretCharacter(char: Character) {
-            setMySecret(char);
-        }
-
-        function onGameStarted(room: GameState) {
-            setGameState(room);
-            setLogs(prev => [...prev, "Partida Començada!"]);
-        }
-
-        function onReceiveQuestion(data: { question: string, attribute: string, value: any }) {
-            setIncomingQuestion(data);
-        }
-
+        function onConnect() { setIsConnected(true); }
+        function onDisconnect() { setIsConnected(false); }
+        function onRoomUpdate(room: GameState) { setGameState(room); }
+        function onSecretCharacter(char: Character) { setMySecret(char); }
+        function onGameStarted(room: GameState) { setGameState(room); setLogs(prev => [...prev, "Partida Començada!"]); }
+        function onReceiveQuestion(data: { question: string, attribute: string, value: any }) { setIncomingQuestion(data); }
         function onReceiveAnswer(data: { answer: boolean, attribute: string, value: any, from: string }) {
             const answerText = data.answer ? "SÍ" : "NO";
             setLogs(prev => [...prev, `Resposta: ${answerText}`]);
         }
-
         function onGameOver(data: { winner: string, reason: string }) {
             setGameState(prev => prev ? { ...prev, status: 'finished', winner: data.winner, reason: data.reason } as any : null);
         }
-
         function onStatsUpdate(data: { wins: number, losses: number }) {
             if (!data) return;
             setWins(data.wins || 0);
             setLosses(data.losses || 0);
         }
-
-        function onTurnTimeout(data: { playerId: string }) {
-            setLogs(prev => [...prev, `⏰ Temps esgotat!`]);
-        }
-
-        function onLifeLost(data: { livesRemaining: number }) {
-            setLogs(prev => [...prev, `💔 Has perdut una vida! Vides restants: ${data.livesRemaining}`]);
-        }
+        function onTurnTimeout(data: { playerId: string }) { setLogs(prev => [...prev, `⏰ Temps esgotat!`]); }
+        function onLifeLost(data: { livesRemaining: number }) { setLogs(prev => [...prev, `💔 Has perdut una vida! Vides restants: ${data.livesRemaining}`]); }
 
         socket.on('connect', onConnect);
         socket.on('disconnect', onDisconnect);
@@ -132,7 +114,7 @@ export default function Home({ username }: HomeProps) {
         };
     }, []);
 
-    // Load persistent stats when username is set (after login)
+    // Load persistent stats
     useEffect(() => {
         if (!username) return;
         fetch(`/api/stats/${encodeURIComponent(username)}`)
@@ -142,10 +124,17 @@ export default function Home({ username }: HomeProps) {
                     setWins(data.wins || 0);
                     setLosses(data.losses || 0);
                 }
-            }).catch(err => {
-                console.warn('Could not load stats:', err);
-            });
+            }).catch(err => console.warn('Could not load stats:', err));
     }, [username]);
+
+    // Check for auto-join from invitation
+    useEffect(() => {
+        const state = location.state as { joinRoomId?: string, config?: any };
+        if (state?.joinRoomId) {
+            joinRoom(state.joinRoomId, state.config);
+            window.history.replaceState({}, document.title);
+        }
+    }, [location.state]);
 
     const joinRoom = (roomId: string, config?: any) => {
         socket.connect();
@@ -153,9 +142,7 @@ export default function Home({ username }: HomeProps) {
     };
 
     const toggleEliminate = (id: number) => {
-        setEliminatedIds(prev =>
-            prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
-        );
+        setEliminatedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
     };
 
     const formatQuestion = (attr: string, val: any) => {
@@ -173,35 +160,20 @@ export default function Home({ username }: HomeProps) {
     const askQuestion = () => {
         if (!gameState || gameState.turn !== socket.id) return;
         const question = formatQuestion(selectedAttr, selectedValue);
-        socket.emit('ask_question', {
-            roomId: gameState.roomId,
-            question,
-            attribute: selectedAttr,
-            value: selectedValue
-        });
+        socket.emit('ask_question', { roomId: gameState.roomId, question, attribute: selectedAttr, value: selectedValue });
         setLogs(prev => [...prev, `Has preguntat: ${question}`]);
     };
 
     const askPredefinedQuestion = (q: PredefinedQuestion) => {
         if (!gameState || gameState.turn !== socket.id) return;
-        socket.emit('ask_question', {
-            roomId: gameState.roomId,
-            question: q.question,
-            attribute: q.attribute,
-            value: q.value
-        });
+        socket.emit('ask_question', { roomId: gameState.roomId, question: q.question, attribute: q.attribute, value: q.value });
         setLogs(prev => [...prev, `Has preguntat: ${q.question}`]);
         setShowPredefinedQuestions(false);
     };
 
     const answerQuestion = (answer: boolean) => {
         if (!gameState || !incomingQuestion) return;
-        socket.emit('answer_question', {
-            roomId: gameState.roomId,
-            answer,
-            attribute: incomingQuestion.attribute,
-            value: incomingQuestion.value
-        });
+        socket.emit('answer_question', { roomId: gameState.roomId, answer, attribute: incomingQuestion.attribute, value: incomingQuestion.value });
         setIncomingQuestion(null);
     };
 
@@ -218,9 +190,7 @@ export default function Home({ username }: HomeProps) {
         setMySecret(undefined);
         setLogs([]);
         setIncomingQuestion(null);
-        // Optionally disconnect or stay connected to lobby
-        // For now, let's go back to lobby
-        // socket.disconnect(); // Keep connection for lobby updates?
+        setSidebarHidden(false);
     };
 
     if (!gameState) {
@@ -234,22 +204,10 @@ export default function Home({ username }: HomeProps) {
     const isMyTurn = gameState.turn === socket.id;
     const opponent = gameState.players.find(p => p.id !== socket.id);
     const opponentName = opponent?.name || 'Rival';
-    const myPlayer = gameState.players.find(p => p.id === socket.id);
-    const myLives = myPlayer?.lives;
-    const opponentLives = opponent?.lives;
 
+    // RENDER: GAME UI
     return (
-        <div style={{
-            padding: '10px',
-            fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
-            background: 'linear-gradient(to bottom, #ecf0f1 0%, #bdc3c7 100%)',
-            minHeight: '100vh',
-            maxHeight: '100vh',
-            overflow: 'hidden',
-            backgroundAttachment: 'fixed',
-            display: 'flex',
-            flexDirection: 'column'
-        }}>
+        <div className="game-container">
             {gameState.status === 'finished' && (
                 <GameOverModal
                     winner={gameState.winner === socket.id ? username : opponentName}
@@ -259,546 +217,194 @@ export default function Home({ username }: HomeProps) {
                 />
             )}
 
-            {/* Header Section - Compact */}
-            <div style={{
-                background: 'linear-gradient(135deg, #2c3e50 0%, #34495e 100%)',
-                padding: '10px 15px',
-                borderRadius: '10px',
-                marginBottom: '10px',
-                boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
-                border: '2px solid rgba(255,255,255,0.1)',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                flexWrap: 'wrap',
-                gap: '15px'
-            }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-                    <div>
-                        <h2 style={{
-                            color: '#FFD700',
-                            margin: 0,
-                            fontSize: '1.2rem',
-                            textShadow: '1px 1px 2px rgba(0,0,0,0.3)'
-                        }}>
-                            🎮 {gameState.roomId}
-                        </h2>
-                        <h3 style={{
-                            color: '#ecf0f1',
-                            margin: '3px 0 0 0',
-                            fontSize: '0.9rem'
-                        }}>
-                            {username} vs {opponentName}
-                        </h3>
-                    </div>
+            {/* TOP BAR */}
+            <div className="top-bar">
+                <div className="game-info-badge" style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                    {/* Left side avatars could go here if needed, keeping simple like ref image which shows Names clearly */}
+                    <div style={{ fontWeight: '700', color: '#7289da', fontSize: '1.1rem' }}>{username}</div>
+                    <div style={{ color: '#72767d', fontWeight: '800' }}>VS</div>
+                    <div style={{ fontWeight: '700', color: '#f04747', fontSize: '1.1rem' }}>{opponentName}</div>
+                </div>
 
-                    <div style={{
-                        padding: '8px 15px',
-                        backgroundColor: isMyTurn ? '#27ae60' : '#e74c3c',
-                        borderRadius: '8px',
-                        boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
-                        animation: isMyTurn ? 'pulse 2s infinite' : 'none'
-                    }}>
-                        {gameState.config && (
-                            <div style={{
-                                marginTop: '5px',
-                                display: 'flex',
-                                gap: '8px',
-                                fontSize: '0.75rem'
-                            }}>
-                                <span style={{
-                                    backgroundColor: '#9b59b6',
-                                    padding: '3px 8px',
-                                    borderRadius: '5px',
-                                    color: 'white',
-                                    fontWeight: 'bold'
-                                }}>
-                                    {gameState.config.mode === 'hardcore' && '⚡ HARDCORE'}
-                                    {gameState.config.mode === 'lives' && '❤️ VIDES'}
-                                </span>
-                                <span style={{
-                                    backgroundColor: '#3498db',
-                                    padding: '3px 8px',
-                                    borderRadius: '5px',
-                                    color: 'white',
-                                    fontWeight: 'bold'
-                                }}>
-                                    ⏱️ {gameState.config.turnTime}s
-                                </span>
-                            </div>
-                        )}
-                        {/* Lives Display for Lives Mode */}
-                        {gameState.config?.mode === 'lives' && (
-                            <div style={{
-                                display: 'flex',
-                                flexDirection: 'column',
-                                gap: '8px',
-                                backgroundColor: 'rgba(255,255,255,0.1)',
-                                padding: '10px 15px',
-                                borderRadius: '8px'
-                            }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    <span style={{ color: '#FFD700', fontSize: '0.9rem', fontWeight: 'bold' }}>
-                                        Tu:
-                                    </span>
-                                    <span style={{ fontSize: '1.2rem' }}>
-                                        {Array.from({ length: myLives || 0 }).map(() => '❤️').join(' ')}
-                                        {Array.from({ length: 2 - (myLives || 0) }).map(() => '🖤').join(' ')}
-                                    </span>
-                                </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    <span style={{ color: '#ecf0f1', fontSize: '0.9rem', fontWeight: 'bold' }}>
-                                        {opponentName}:
-                                    </span>
-                                    <span style={{ fontSize: '1.2rem' }}>
-                                        {Array.from({ length: opponentLives || 0 }).map(() => '❤️').join(' ')}
-                                        {Array.from({ length: 2 - (opponentLives || 0) }).map(() => '🖤').join(' ')}
-                                    </span>
-                                </div>
-                            </div>
-                        )}
-                        <p style={{
-                            fontSize: '1rem',
-                            fontWeight: 'bold',
-                            color: 'white',
-                            margin: 0,
-                            textShadow: '1px 1px 2px rgba(0,0,0,0.3)'
-                        }}>
-                            {isMyTurn ? "⏰ EL TEU TORN" : "⌛ TORN RIVAL"}
-                        </p>
-                    </div>
-
-                    {/* Timer Display */}
-                    <div style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        gap: '5px'
-                    }}>
-                        <div style={{
-                            fontSize: '2rem',
-                            fontWeight: 'bold',
-                            color: timeRemaining <= 10 ? '#e74c3c' : '#FFD700',
-                            textShadow: '2px 2px 4px rgba(0,0,0,0.5)',
-                            animation: timeRemaining <= 10 ? 'pulse 1s infinite' : 'none',
-                            minWidth: '70px',
-                            textAlign: 'center'
-                        }}>
-                            {timeRemaining}s
-                        </div>
-                        <div style={{
-                            width: '100px',
-                            height: '8px',
-                            backgroundColor: 'rgba(255,255,255,0.2)',
-                            borderRadius: '4px',
-                            overflow: 'hidden',
-                            border: '1px solid rgba(255,255,255,0.3)'
-                        }}>
-                            <div style={{
-                                height: '100%',
-                                width: `${(timeRemaining / (gameState.turnTimeLimit || 60)) * 100}%`,
-                                backgroundColor: timeRemaining <= 10 ? '#e74c3c' : timeRemaining <= 30 ? '#f39c12' : '#27ae60',
-                                transition: 'width 0.1s linear, background-color 0.3s ease',
-                                boxShadow: timeRemaining <= 10 ? '0 0 10px #e74c3c' : 'none'
-                            }}></div>
-                        </div>
+                <div className="timer-container">
+                    {isMyTurn ? (
+                        <div className="turn-badge me">TU TORN</div>
+                    ) : (
+                        <div className="turn-badge opponent">TORN RIVAL</div>
+                    )}
+                    <div className="timer-value">{timeRemaining}s</div>
+                    <div className="timer-bar-bg">
+                        <div className="timer-bar-fill" style={{
+                            width: `${(timeRemaining / (gameState.turnTimeLimit || 60)) * 100}%`,
+                            backgroundColor: timeRemaining <= 10 ? '#f04747' : '#43b581'
+                        }}></div>
                     </div>
                 </div>
 
-                {/* Game Log - Compact */}
-                <div style={{
-                    width: '280px',
-                    backgroundColor: 'white',
-                    borderRadius: '8px',
-                    boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
-                    overflow: 'hidden',
-                    border: '2px solid #FFD700'
+                <div className="mode-badge" style={{
+                    background: '#9b59b6', padding: '6px 12px', borderRadius: '4px', fontWeight: '700', color: 'white', textTransform: 'uppercase', fontSize: '0.8rem', boxShadow: '0 3px 0 rgba(0,0,0,0.2)'
                 }}>
-                    <div style={{
-                        backgroundColor: '#FFD700',
-                        padding: '6px 10px',
-                        borderBottom: '1px solid #DAA520'
-                    }}>
-                        <h4 style={{
-                            margin: 0,
-                            color: '#2c3e50',
-                            fontWeight: 'bold',
-                            fontSize: '0.85rem'
-                        }}>
-                            📋 Registre
-                        </h4>
-                    </div>
-                    <div style={{
-                        height: '80px',
-                        overflowY: 'auto',
-                        padding: '8px',
-                    }}>
-                        {logs.length === 0 ? (
-                            <p style={{ color: '#95a5a6', textAlign: 'center', margin: '10px 0', fontSize: '0.8rem' }}>
-                                No hi ha jugades...
-                            </p>
-                        ) : (
-                            logs.map((l, i) => (
-                                <div key={i} style={{
-                                    fontSize: '0.75rem',
-                                    marginBottom: '5px',
-                                    padding: '5px',
-                                    backgroundColor: i % 2 === 0 ? '#f8f9fa' : 'white',
-                                    borderRadius: '4px',
-                                    borderLeft: '2px solid #3498db'
-                                }}>
-                                    {l}
-                                </div>
-                            ))
-                        )}
-                    </div>
+                    {gameState.config?.mode || 'HARDCORE'}
                 </div>
             </div>
 
-            {incomingQuestion && (
-                <div style={{
-                    background: 'linear-gradient(135deg, #f39c12 0%, #f1c40f 100%)',
-                    padding: '15px 20px',
-                    margin: '10px 0',
-                    borderRadius: '10px',
-                    boxShadow: '0 4px 10px rgba(0,0,0,0.2)',
-                    textAlign: 'center',
-                    border: '3px solid #e67e22',
-                    animation: 'shake 0.5s',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    gap: '15px'
-                }}>
-                    <div style={{
-                        fontSize: '2rem'
-                    }}>
-                        ❓
-                    </div>
-                    <h3 style={{
-                        color: '#2c3e50',
-                        fontSize: '1.1rem',
-                        margin: 0,
-                        textShadow: '1px 1px 2px rgba(255,255,255,0.5)',
-                        flex: 1
-                    }}>
-                        <strong>El rival pregunta:</strong> {incomingQuestion.question}
-                    </h3>
-                    <div style={{ display: 'flex', gap: '10px' }}>
-                        <button onClick={() => answerQuestion(true)} style={{
-                            padding: '10px 30px',
-                            backgroundColor: '#27ae60',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '8px',
-                            cursor: 'pointer',
-                            fontWeight: 'bold',
-                            fontSize: '1.1rem',
-                            boxShadow: '0 3px 6px rgba(0,0,0,0.2)',
-                            transition: 'all 0.2s',
-                            transform: 'scale(1)'
-                        }}
-                            onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
-                            onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
-                        >
-                            ✓ SÍ
-                        </button>
-                        <button onClick={() => answerQuestion(false)} style={{
-                            padding: '10px 30px',
-                            backgroundColor: '#c0392b',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '8px',
-                            cursor: 'pointer',
-                            fontWeight: 'bold',
-                            fontSize: '1.1rem',
-                            boxShadow: '0 3px 6px rgba(0,0,0,0.2)',
-                            transition: 'all 0.2s',
-                            transform: 'scale(1)'
-                        }}
-                            onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
-                            onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
-                        >
-                            ✗ NO
-                        </button>
-                    </div>
-                </div>
-            )}
+            {/* MAIN GRID */}
+            <div className="game-grid">
 
-            {isMyTurn && !incomingQuestion && (
-                <div style={{
-                    margin: '10px 0',
-                    padding: '12px 15px',
-                    background: 'linear-gradient(135deg, #3498db 0%, #2980b9 100%)',
-                    borderRadius: '10px',
-                    boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
-                    border: '2px solid rgba(255,255,255,0.2)'
-                }}>
-                    <div style={{
-                        display: 'flex',
-                        gap: '10px',
-                        alignItems: 'center',
-                        flexWrap: 'wrap'
-                    }}>
-                        <span style={{
-                            color: 'white',
-                            fontWeight: 'bold',
-                            fontSize: '0.95rem',
-                            marginRight: '5px'
-                        }}>
-                            💭 Pregunta:
-                        </span>
-                        <select
-                            value={selectedAttr}
-                            onChange={e => setSelectedAttr(e.target.value)}
-                            style={{
-                                padding: '8px 12px',
-                                borderRadius: '6px',
-                                border: '2px solid #2c3e50',
-                                fontSize: '0.9rem',
-                                fontWeight: 'bold',
-                                backgroundColor: 'white',
-                                cursor: 'pointer'
-                            }}
-                        >
-                            <option value="gender">👤 Gènere</option>
-                            <option value="hairColor">💇 Cabell</option>
-                            <option value="eyeColor">👁️ Ulls</option>
-                            <option value="hasBeard">🧔 Barba</option>
-                            <option value="hasGlasses">👓 Ulleres</option>
-                            <option value="hasHat">🎩 Barret</option>
-                        </select>
+                {/* LEFT COLUMN: ACTIONS (Vertical Fit) */}
+                <div className="panel-column left">
+                    {/* Ask Question Panel (Blue) */}
+                    <div className="panel-card panel-blue">
+                        <div className="panel-header">
+                            Hacer Pregunta
+                        </div>
+                        <div className="panel-body">
+                            {incomingQuestion ? (
+                                <div style={{ textAlign: 'center' }}>
+                                    <h4 style={{ margin: '0 0 10px 0', color: '#faa61a' }}>Fes la teva resposta!</h4>
+                                    <p style={{ marginBottom: '10px' }}>{incomingQuestion.question}</p>
+                                    <div style={{ display: 'flex', gap: '8px' }}>
+                                        <button className="btn-action btn-green" onClick={() => answerQuestion(true)}>SÍ</button>
+                                        <button className="btn-action btn-red" onClick={() => answerQuestion(false)}>NO</button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <>
+                                    <select className="game-select" value={selectedAttr} onChange={e => setSelectedAttr(e.target.value)}>
+                                        <option value="gender">Gènere</option>
+                                        <option value="hairColor">Cabell</option>
+                                        <option value="eyeColor">Ulls</option>
+                                        <option value="hasBeard">Barba</option>
+                                        <option value="hasGlasses">Ulleres</option>
+                                        <option value="hasHat">Barret</option>
+                                    </select>
 
-                        {['gender', 'hairColor', 'eyeColor'].includes(selectedAttr) ? (
-                            <input
-                                type="text"
-                                placeholder="Valor"
-                                value={selectedValue}
-                                onChange={e => setSelectedValue(e.target.value)}
-                                style={{
-                                    padding: '8px 12px',
-                                    borderRadius: '6px',
-                                    border: '2px solid #2c3e50',
-                                    fontSize: '0.9rem',
-                                    minWidth: '150px'
-                                }}
-                            />
-                        ) : (
-                            <select
-                                value={selectedValue}
-                                onChange={e => setSelectedValue(e.target.value)}
-                                style={{
-                                    padding: '8px 12px',
-                                    borderRadius: '6px',
-                                    border: '2px solid #2c3e50',
-                                    fontSize: '0.9rem',
-                                    fontWeight: 'bold',
-                                    backgroundColor: 'white',
-                                    cursor: 'pointer'
-                                }}
-                            >
-                                <option value="">Selecciona...</option>
-                                <option value="true">✓ Sí</option>
-                                <option value="false">✗ No</option>
-                            </select>
-                        )}
+                                    {['gender', 'hairColor', 'eyeColor'].includes(selectedAttr) ? (
+                                        <input className="game-input" type="text" placeholder="Valor (p.e. Dona, Ros)" value={selectedValue} onChange={e => setSelectedValue(e.target.value)} />
+                                    ) : (
+                                        <select className="game-select" value={selectedValue} onChange={e => setSelectedValue(e.target.value)}>
+                                            <option value="">Selecciona...</option>
+                                            <option value="true">Sí</option>
+                                            <option value="false">No</option>
+                                        </select>
+                                    )}
 
-                        <button onClick={askQuestion} style={{
-                            padding: '8px 20px',
-                            backgroundColor: '#27ae60',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '6px',
-                            cursor: 'pointer',
-                            fontWeight: 'bold',
-                            fontSize: '0.95rem',
-                            boxShadow: '0 3px 6px rgba(0,0,0,0.2)',
-                            transition: 'all 0.2s',
-                            transform: 'scale(1)'
-                        }}
-                            onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
-                            onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
-                        >
-                            ❓ Preguntar
-                        </button>
-
-                        <button
-                            onClick={() => setShowPredefinedQuestions(!showPredefinedQuestions)}
-                            style={{
-                                padding: '8px 20px',
-                                backgroundColor: '#9b59b6',
-                                color: 'white',
-                                border: 'none',
-                                borderRadius: '6px',
-                                cursor: 'pointer',
-                                fontWeight: 'bold',
-                                fontSize: '0.95rem',
-                                boxShadow: '0 3px 6px rgba(0,0,0,0.2)',
-                                transition: 'all 0.2s',
-                                transform: 'scale(1)'
-                            }}
-                            onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
-                            onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
-                        >
-                            📝 Preguntes ràpides
-                        </button>
-
-                        <span style={{
-                            color: 'white',
-                            fontSize: '0.8rem',
-                            marginLeft: 'auto',
-                            backgroundColor: 'rgba(255,255,255,0.1)',
-                            padding: '5px 10px',
-                            borderRadius: '5px'
-                        }}>
-                            💡 Clica carta per descartar
-                        </span>
-                    </div>
-
-                    {/* Predefined Questions Dropdown */}
-                    {showPredefinedQuestions && (
-                        <div style={{
-                            marginTop: '10px',
-                            backgroundColor: 'rgba(255,255,255,0.95)',
-                            borderRadius: '8px',
-                            padding: '10px',
-                            maxHeight: '200px',
-                            overflowY: 'auto',
-                            boxShadow: '0 4px 8px rgba(0,0,0,0.2)'
-                        }}>
-                            <div style={{
-                                display: 'grid',
-                                gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-                                gap: '8px'
-                            }}>
+                                    <div style={{ display: 'flex', gap: '8px' }}>
+                                        <button className="btn-action btn-green" disabled={!isMyTurn} onClick={askQuestion}> Preguntar</button>
+                                        <button className="btn-action btn-purple" disabled={!isMyTurn} onClick={() => setShowPredefinedQuestions(!showPredefinedQuestions)}> Ràpides</button>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                        {showPredefinedQuestions && (
+                            <div style={{ padding: '0 12px 12px 12px', maxHeight: '150px', overflowY: 'auto' }}>
                                 {predefinedQuestions.map(q => (
-                                    <button
-                                        key={q.id}
-                                        onClick={() => askPredefinedQuestion(q)}
-                                        style={{
-                                            padding: '10px',
-                                            backgroundColor: '#ecf0f1',
-                                            border: '2px solid #3498db',
-                                            borderRadius: '6px',
-                                            cursor: 'pointer',
-                                            textAlign: 'left',
-                                            fontSize: '0.85rem',
-                                            transition: 'all 0.2s',
-                                            fontWeight: '500',
-                                            color: '#2c3e50'
-                                        }}
-                                        onMouseEnter={(e) => {
-                                            e.currentTarget.style.backgroundColor = '#3498db';
-                                            e.currentTarget.style.color = 'white';
-                                        }}
-                                        onMouseLeave={(e) => {
-                                            e.currentTarget.style.backgroundColor = '#ecf0f1';
-                                            e.currentTarget.style.color = '#2c3e50';
-                                        }}
-                                    >
+                                    <div key={q.id} onClick={() => askPredefinedQuestion(q)} style={{ padding: '8px', borderBottom: '1px solid rgba(255,255,255,0.05)', cursor: 'pointer', fontSize: '0.8rem' }}>
                                         {q.question}
-                                    </button>
+                                    </div>
                                 ))}
                             </div>
+                        )}
+                    </div>
+
+                    {/* Final Guess Panel (Orange) */}
+                    <div className="panel-card panel-orange">
+                        <div className="panel-header">
+                            Intent Final
                         </div>
-                    )}
-                </div>
-            )}
+                        <div className="panel-body">
+                            <select id="guessSelect" className="game-select">
+                                {characters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                            </select>
+                            <button className="btn-action btn-red" disabled={!isMyTurn} onClick={() => {
+                                const select = document.getElementById('guessSelect') as HTMLSelectElement;
+                                guessCharacter(parseInt(select.value));
+                            }}> Endevinar</button>
+                            <div style={{ fontSize: '0.75rem', color: '#f04747', textAlign: 'center', fontWeight: 'bold' }}> Si falles, perds!</div>
+                        </div>
+                    </div>
 
-            <div style={{
-                flex: 1,
-                display: 'flex',
-                gap: '10px',
-                minHeight: 0,
-                overflow: 'hidden'
-            }}>
-                <GameBoard
-                    characters={characters}
-                    eliminatedIds={eliminatedIds}
-                    onToggleEliminate={(id) => {
-                        if (isMyTurn && !incomingQuestion) {
-                            toggleEliminate(id);
-                        } else {
-                            toggleEliminate(id);
-                        }
-                    }}
-                    secretCharacter={mySecret}
-                    playerColor="blue"
-                />
+                    {/* Logs (Blue) - Grows to fill space */}
+                    <div className="panel-card panel-blue grow-panel">
+                        <div className="panel-header"> Registre de Batalla</div>
+                        <div className="panel-body">
+                            <div className="log-container">
+                                {logs.length === 0 ? <div style={{ color: '#72767d', fontStyle: 'italic' }}>Iniciant...</div> : logs.map((l, i) => <div key={i} className="log-item">{l}</div>)}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* CENTER COLUMN: BOARD */}
+                <div className="board-area">
+                    <div className="card-grid">
+                        {characters.map(char => (
+                            <div
+                                key={char.id}
+                                className={`game-card ${eliminatedIds.includes(char.id) ? 'eliminated' : ''}`}
+                                onClick={() => toggleEliminate(char.id)}
+                            >
+                                <img src={char.image} alt={char.name} className="card-image" />
+                                <div className="card-name">{char.name}</div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                {/* RIGHT COLUMN: STATS & CONFIG */}
+                <div className="panel-column right">
+                    {/* Stats (Green) */}
+                    <div className="panel-card panel-green">
+                        <div className="panel-header"> Estadístiques</div>
+                        <div className="panel-body">
+                            <div className="stat-row">
+                                <span className="stat-label">Victòries</span>
+                                <span className="stat-value">{wins}</span>
+                            </div>
+                            <div className="stat-row">
+                                <span className="stat-label">Derrotes</span>
+                                <span className="stat-value" style={{ color: '#f04747' }}>{losses}</span>
+                            </div>
+                            <div className="stat-row">
+                                <span className="stat-label">Win Rate</span>
+                                <span className="stat-value" style={{ color: '#faa61a' }}>{wins + losses > 0 ? ((wins / (wins + losses)) * 100).toFixed(1) : 0}%</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Config (Blue) */}
+                    <div className="panel-card panel-blue">
+                        <div className="panel-header"> Configuració</div>
+                        <div className="panel-body">
+                            <div className="stat-row">
+                                <span className="stat-label">Modo</span>
+                                <span className="stat-value">{gameState.config?.mode === 'hardcore' ? 'Hardcore' : 'Vides'}</span>
+                            </div>
+                            <div className="stat-row">
+                                <span className="stat-label">Temps/torn</span>
+                                <span className="stat-value">{gameState.turnTimeLimit}s</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Secret Card (Orange) */}
+                    <div className="panel-card panel-orange" style={{ flex: 1 }}>
+                        <div className="panel-header"> Carta Secreta</div>
+                        <div className="panel-body" style={{ alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+                            {mySecret ? (
+                                <div style={{ width: '80%', textAlign: 'center' }}>
+                                    <div className="game-card" style={{ cursor: 'default', transform: 'none' }}>
+                                        <img src={mySecret.image} alt={mySecret.name} className="card-image" />
+                                        <div className="card-name">{mySecret.name}</div>
+                                    </div>
+                                    <div style={{ marginTop: '10px', fontWeight: '700', fontSize: '1.2rem' }}>{mySecret.name}</div>
+                                </div>
+                            ) : <div>?</div>}
+                        </div>
+                    </div>
+                </div>
+
             </div>
-
-            {isMyTurn && (
-                <div style={{
-                    marginTop: '10px',
-                    textAlign: 'center',
-                    padding: '12px 20px',
-                    background: 'linear-gradient(135deg, #e67e22 0%, #d35400 100%)',
-                    borderRadius: '10px',
-                    boxShadow: '0 4px 8px rgba(0,0,0,0.3)',
-                    border: '3px solid #c0392b',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '15px'
-                }}>
-                    <span style={{ fontSize: '1.5rem' }}>🎯</span>
-                    <span style={{
-                        color: 'white',
-                        fontSize: '1rem',
-                        fontWeight: 'bold',
-                        textShadow: '1px 1px 2px rgba(0,0,0,0.3)'
-                    }}>
-                        Intent final:
-                    </span>
-                    <select id="guessSelect" style={{
-                        padding: '8px 12px',
-                        borderRadius: '6px',
-                        border: '2px solid #2c3e50',
-                        fontSize: '0.95rem',
-                        fontWeight: 'bold',
-                        backgroundColor: 'white',
-                        cursor: 'pointer'
-                    }}>
-                        {characters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                    </select>
-                    <button onClick={() => {
-                        const select = document.getElementById('guessSelect') as HTMLSelectElement;
-                        guessCharacter(parseInt(select.value));
-                    }} style={{
-                        padding: '8px 25px',
-                        backgroundColor: '#c0392b',
-                        color: 'white',
-                        border: '2px solid #922b21',
-                        borderRadius: '6px',
-                        cursor: 'pointer',
-                        fontWeight: 'bold',
-                        fontSize: '1rem',
-                        boxShadow: '0 3px 6px rgba(0,0,0,0.3)',
-                        transition: 'all 0.2s',
-                        transform: 'scale(1)'
-                    }}
-                        onMouseEnter={(e) => {
-                            e.currentTarget.style.transform = 'scale(1.05)';
-                            e.currentTarget.style.backgroundColor = '#a93226';
-                        }}
-                        onMouseLeave={(e) => {
-                            e.currentTarget.style.transform = 'scale(1)';
-                            e.currentTarget.style.backgroundColor = '#c0392b';
-                        }}
-                    >
-                        🎲 Endevinar
-                    </button>
-                    <span style={{
-                        color: '#fff',
-                        fontSize: '0.8rem',
-                        backgroundColor: 'rgba(192,57,43,0.5)',
-                        padding: '5px 10px',
-                        borderRadius: '5px'
-                    }}>
-                        ⚠️ Si falles, perds!
-                    </span>
-                </div>
-            )}
         </div>
     );
 }
