@@ -5,10 +5,15 @@ interface Props {
     character: Character;
     eliminated: boolean;
     onClick: () => void;
+    compact?: boolean;
 }
 
-export const CharacterCard: React.FC<Props> = ({ character, eliminated, onClick }) => {
+export const CharacterCard: React.FC<Props> = ({ character, eliminated, onClick, compact = false }) => {
     const [isHovered, setIsHovered] = useState(false);
+
+    // Mida dinàmica segons si és compacte o no
+    const width = compact ? '110px' : '150px';
+    const height = compact ? '150px' : '200px';
 
     return (
         <div 
@@ -16,103 +21,119 @@ export const CharacterCard: React.FC<Props> = ({ character, eliminated, onClick 
             onMouseEnter={() => setIsHovered(true)}
             onMouseLeave={() => setIsHovered(false)}
             style={{
-                width: '85px',
-                height: '110px',
-                margin: '4px',
+                width,
+                height,
                 perspective: '1000px',
                 cursor: 'pointer',
-                transition: 'transform 0.1s ease',
-                transform: isHovered && !eliminated ? 'scale(1.05)' : 'scale(1)',
+                position: 'relative'
             }}
         >
             <div style={{
-                position: 'relative',
                 width: '100%',
                 height: '100%',
+                transition: 'transform 0.6s cubic-bezier(0.4, 0.0, 0.2, 1)',
                 transformStyle: 'preserve-3d',
-                transition: 'transform 0.6s',
                 transform: eliminated ? 'rotateY(180deg)' : 'rotateY(0deg)',
+                position: 'relative',
+                boxShadow: isHovered && !eliminated ? '0 15px 35px rgba(0,0,0,0.5)' : '0 5px 15px rgba(0,0,0,0.3)',
+                borderRadius: '12px',
             }}>
-                {/* Front Side */}
-                <div style={{
+                
+                {/* --- CARA FRONTAL (Personatge) --- */}
+                <div className="card-face card-front" style={{
                     position: 'absolute',
-                    width: '100%',
-                    height: '100%',
+                    inset: 0,
                     backfaceVisibility: 'hidden',
-                    backgroundColor: '#FFD700',
-                    borderRadius: '8px',
-                    padding: '4px',
-                    boxShadow: eliminated ? 'none' : '0 4px 8px rgba(0,0,0,0.3)',
-                    border: '3px solid #DAA520',
+                    background: 'linear-gradient(135deg, #1e2a3a 0%, #111827 100%)',
+                    borderRadius: '12px',
+                    border: isHovered ? '2px solid var(--primary-gold)' : '2px solid rgba(255,255,255,0.1)',
+                    padding: '6px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '6px',
+                    overflow: 'hidden'
                 }}>
+                    {/* Marc de la imatge */}
                     <div style={{
-                        width: '100%',
-                        height: '100%',
-                        backgroundColor: 'white',
-                        borderRadius: '4px',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        padding: '4px',
-                        border: '2px solid #FFA500',
+                        flex: 1,
+                        position: 'relative',
+                        borderRadius: '8px',
+                        overflow: 'hidden',
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        background: '#000'
                     }}>
                         <img 
                             src={character.image} 
                             alt={character.name} 
                             style={{ 
-                                width: '60px', 
-                                height: '60px', 
-                                objectFit: 'cover', 
-                                borderRadius: '50%',
-                                border: '2px solid #FFD700',
-                                marginBottom: '3px'
+                                width: '100%', 
+                                height: '100%', 
+                                objectFit: 'cover',
+                                transition: 'transform 0.5s ease',
+                                transform: isHovered ? 'scale(1.1)' : 'scale(1)'
                             }} 
                         />
+                        {/* Brillantor sobre la imatge */}
                         <div style={{
-                            fontSize: '9px',
-                            fontWeight: 'bold',
-                            color: '#2c3e50',
-                            textAlign: 'center',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
+                            position: 'absolute',
+                            inset: 0,
+                            background: 'linear-gradient(to bottom, rgba(0,0,0,0) 70%, rgba(0,0,0,0.6) 100%)'
+                        }} />
+                    </div>
+
+                    {/* Nom del personatge */}
+                    <div style={{
+                        background: 'rgba(255,255,255,0.05)',
+                        borderRadius: '6px',
+                        padding: '4px 2px',
+                        textAlign: 'center',
+                        border: '1px solid rgba(255,255,255,0.05)'
+                    }}>
+                        <div style={{
+                            fontSize: compact ? '0.7rem' : '0.8rem',
+                            fontWeight: 800,
+                            color: isHovered ? 'var(--primary-gold)' : '#ecf0f1',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.5px',
                             whiteSpace: 'nowrap',
-                            width: '100%',
-                            padding: '0 2px'
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis'
                         }}>
                             {character.name}
                         </div>
                     </div>
                 </div>
 
-                {/* Back Side */}
-                <div style={{
+                {/* --- CARA POSTERIOR (Dors) --- */}
+                <div className="card-face card-back" style={{
                     position: 'absolute',
-                    width: '100%',
-                    height: '100%',
+                    inset: 0,
                     backfaceVisibility: 'hidden',
-                    backgroundColor: '#FFD700',
-                    borderRadius: '8px',
-                    padding: '4px',
-                    boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
                     transform: 'rotateY(180deg)',
-                    border: '3px solid #DAA520',
+                    background: 'linear-gradient(135deg, #1a253a 0%, #0f172a 100%)',
+                    borderRadius: '12px',
+                    border: '2px solid rgba(255,255,255,0.1)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: 'inset 0 0 20px rgba(0,0,0,0.5)'
                 }}>
+                    {/* Patró decoratiu del dors */}
                     <div style={{
-                        width: '100%',
-                        height: '100%',
-                        backgroundColor: '#4a4a4a',
-                        borderRadius: '4px',
+                        width: 'calc(100% - 16px)',
+                        height: 'calc(100% - 16px)',
+                        border: '1px dashed rgba(255,215,0,0.3)',
+                        borderRadius: '8px',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        border: '2px solid #FFA500',
+                        background: 'radial-gradient(circle, rgba(52, 152, 219, 0.1) 0%, transparent 70%)'
                     }}>
                         <span style={{
-                            fontSize: '45px',
-                            color: '#FFD700',
-                            fontWeight: 'bold',
-                            textShadow: '2px 2px 4px rgba(0,0,0,0.5)'
+                            fontSize: compact ? '2rem' : '3rem',
+                            color: 'rgba(255,255,255,0.1)',
+                            fontWeight: 900,
+                            userSelect: 'none'
                         }}>
                             ?
                         </span>

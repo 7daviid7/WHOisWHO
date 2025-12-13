@@ -18,116 +18,72 @@ export const RoomConfig: React.FC<Props> = ({ onCreateRoom, onCancel }) => {
     };
 
     const gameModeDescriptions: Record<string,string> = {
-        hardcore: 'Una endevinalla incorrecta = derrota immediata',
-        lives: 'Tens 2 vides. Pots fallar dues vegades'
+        hardcore: 'Una fallada = derrota immediata ☠️',
+        lives: 'Tens 2 vides. Pots fallar un cop ❤️'
     };
 
     return (
-        <div style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            width: '100%',
-            height: '100%',
-            backgroundColor: 'rgba(0,0,0,0.8)',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            zIndex: 1000,
-            fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif"
-        }}>
-            <div style={{
-                background: 'linear-gradient(135deg, #2c3e50 0%, #34495e 100%)',
-                padding: '2.5rem',
-                borderRadius: '20px',
-                boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
-                border: '4px solid #FFD700',
-                maxWidth: '500px',
-                width: '90%'
+        <div className="modal-overlay" style={{ backdropFilter: 'blur(8px)' }}>
+            <div className="room-config card" style={{ 
+                animation: 'modalZoomIn 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+                border: '1px solid var(--primary-gold-dark)' 
             }}>
-                <h2 style={{
-                    color: '#FFD700',
-                    textAlign: 'center',
-                    marginTop: 0,
-                    fontSize: '2rem',
-                    textShadow: '2px 2px 4px rgba(0,0,0,0.3)'
-                }}>
-                    ⚙️ Configurar Nova Sala
-                </h2>
+                <div className="card-head" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '15px', marginBottom: '20px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <h2 className="card-title" style={{ fontSize: '1.5rem', display:'flex', alignItems:'center', gap:'10px' }}>
+                            <span style={{ fontSize: '1.8rem' }}></span> Configurar Sala
+                        </h2>
+                        <button 
+                            type="button" 
+                            onClick={onCancel}
+                            style={{ background:'none', border:'none', color:'var(--text-gray)', fontSize:'1.5rem', cursor:'pointer', padding:'0' }}
+                        >
+                            ×
+                        </button>
+                    </div>
+                    <p className="muted" style={{ marginTop: '5px' }}>Personalitza les regles abans de convidar</p>
+                </div>
 
-                <form onSubmit={handleSubmit} style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '1.5rem'
-                }}>
+                <form onSubmit={handleSubmit} className="room-config-form">
                     {/* Room Name */}
                     <div>
-                        <label style={{
-                            color: 'white',
-                            fontWeight: 'bold',
-                            display: 'block',
-                            marginBottom: '8px',
-                            fontSize: '1.1rem'
-                        }}>
-                            📝 Nom de la Sala:
-                        </label>
+                        <label className="field-label">Nom de la Sala</label>
                         <input
+                            className="input"
                             type="text"
                             value={roomName}
                             onChange={(e) => setRoomName(e.target.value)}
-                            placeholder="Introdueix un nom..."
-                            style={{
-                                width: '100%',
-                                padding: '12px',
-                                borderRadius: '10px',
-                                border: '3px solid #FFD700',
-                                fontSize: '1rem',
-                                fontWeight: 'bold',
-                                boxSizing: 'border-box'
-                            }}
+                            placeholder="Ex: La Arena dels Campions..."
                             autoFocus
+                            style={{ fontSize: '1.1rem', padding: '14px' }}
                         />
                     </div>
 
                     {/* Game Mode */}
                     <div>
-                        <label style={{
-                            color: 'white',
-                            fontWeight: 'bold',
-                            display: 'block',
-                            marginBottom: '8px',
-                            fontSize: '1.1rem'
-                        }}>
-                            🎮 Mode de Joc:
-                        </label>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        <label className="field-label">Mode de Joc</label>
+                        <div className="mode-list">
                             {(['hardcore', 'lives'] as const).map(mode => (
-                                <label key={mode} style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    padding: '12px',
-                                    backgroundColor: gameMode === mode ? '#27ae60' : 'rgba(255,255,255,0.1)',
-                                    borderRadius: '10px',
-                                    cursor: 'pointer',
-                                    border: gameMode === mode ? '3px solid #FFD700' : '3px solid transparent',
-                                    transition: 'all 0.2s'
-                                }}>
+                                <label 
+                                    key={mode} 
+                                    className={`mode-item ${gameMode === mode ? 'active' : ''}`}
+                                    style={{ transition: 'all 0.2s ease' }}
+                                >
                                     <input
                                         type="radio"
                                         name="gameMode"
                                         value={mode}
                                         checked={gameMode === mode}
                                         onChange={(e) => setGameMode(e.target.value as any)}
-                                        style={{ marginRight: '10px', cursor: 'pointer' }}
+                                        style={{ accentColor: 'var(--primary-gold)' }}
                                     />
-                                    <div>
-                                        <div style={{ color: 'white', fontWeight: 'bold', fontSize: '1rem' }}>
-                                            {mode === 'hardcore' && '⚡ Hardcore'}
-                                            {mode === 'lives' && '❤️ Vides (x2)'}
+                                    <div className="mode-content">
+                                        <div className="mode-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            {mode === 'hardcore' ? 'Hardcore' : '❤️ Vides (x2)'}
+                                            {gameMode === mode && <span style={{ fontSize: '0.8rem', color: 'var(--primary-gold)', border: '1px solid var(--primary-gold)', borderRadius: '4px', padding: '2px 6px' }}>SELECCIONAT</span>}
                                         </div>
-                                        <div style={{ color: '#ecf0f1', fontSize: '0.85rem', marginTop: '4px' }}>
-                                            {gameModeDescriptions[mode]}
-                                        </div>
+                                        <div className="mode-desc">{gameModeDescriptions[mode]}</div>
                                     </div>
                                 </label>
                             ))}
@@ -136,76 +92,43 @@ export const RoomConfig: React.FC<Props> = ({ onCreateRoom, onCancel }) => {
 
                     {/* Turn Time */}
                     <div>
-                        <label style={{
-                            color: 'white',
-                            fontWeight: 'bold',
-                            display: 'block',
-                            marginBottom: '8px',
-                            fontSize: '1.1rem'
-                        }}>
-                            ⏱️ Temps per Torn:
-                        </label>
-                        <div style={{ display: 'flex', gap: '10px' }}>
+                        <label className="field-label">Temps per Torn</label>
+                        <div className="turn-times">
                             {[60, 30, 15].map(time => (
                                 <button
                                     key={time}
                                     type="button"
+                                    className={`time-btn ${turnTime === time ? 'active' : ''}`}
                                     onClick={() => setTurnTime(time as any)}
-                                    style={{
-                                        flex: 1,
-                                        padding: '15px',
-                                        backgroundColor: turnTime === time ? '#3498db' : 'rgba(255,255,255,0.1)',
-                                        color: 'white',
-                                        border: turnTime === time ? '3px solid #FFD700' : '3px solid transparent',
-                                        borderRadius: '10px',
-                                        cursor: 'pointer',
-                                        fontWeight: 'bold',
-                                        fontSize: '1.1rem',
+                                    style={{ 
+                                        display: 'flex', 
+                                        flexDirection: 'column', 
+                                        alignItems: 'center', 
+                                        justifyContent: 'center',
+                                        gap: '4px',
+                                        height: '70px',
                                         transition: 'all 0.2s'
                                     }}
                                 >
-                                    {time}s
+                                    <span style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>{time}s</span>
+                                    <span style={{ fontSize: '0.75rem', opacity: 0.7, fontWeight: 'normal' }}>
+                                        {time === 60 ? 'Relaxat' : time === 30 ? 'Normal' : 'Ràpid'}
+                                    </span>
                                 </button>
                             ))}
                         </div>
                     </div>
 
                     {/* Buttons */}
-                    <div style={{ display: 'flex', gap: '10px', marginTop: '1rem' }}>
-                        <button
-                            type="button"
-                            onClick={onCancel}
-                            style={{
-                                flex: 1,
-                                padding: '15px',
-                                backgroundColor: '#e74c3c',
-                                color: 'white',
-                                border: '3px solid #c0392b',
-                                borderRadius: '10px',
-                                cursor: 'pointer',
-                                fontWeight: 'bold',
-                                fontSize: '1.1rem',
-                                transition: 'all 0.2s'
-                            }}
+                    <div className="form-actions" style={{ marginTop: '20px', paddingTop: '20px', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                        <button type="button" className="btn btn-ghost" onClick={onCancel}>Cancel·lar</button>
+                        <button 
+                            type="submit" 
+                            className="btn btn-primary"
+                            disabled={!roomName.trim()}
+                            style={{ flex: 2, opacity: !roomName.trim() ? 0.6 : 1 }}
                         >
-                            ❌ Cancel·lar
-                        </button>
-                        <button
-                            type="submit"
-                            style={{
-                                flex: 1,
-                                padding: '15px',
-                                backgroundColor: '#27ae60',
-                                color: 'white',
-                                border: '3px solid #229954',
-                                borderRadius: '10px',
-                                cursor: 'pointer',
-                                fontWeight: 'bold',
-                                fontSize: '1.1rem',
-                                transition: 'all 0.2s'
-                            }}
-                        >
-                            ✅ Crear Sala
+                            Crear Sala
                         </button>
                     </div>
                 </form>
