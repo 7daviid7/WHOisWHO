@@ -26,7 +26,6 @@ export const Login: React.FC<Props> = ({ onLogin }) => {
         }).then(async res => {
             const data = await res.json();
             if (!res.ok) {
-                // Map server status to clearer Catalan messages
                 if (res.status === 401) {
                     setError('Usuari no existeix o contrasenya incorrecta');
                 } else if (res.status === 409) {
@@ -40,7 +39,6 @@ export const Login: React.FC<Props> = ({ onLogin }) => {
             }
 
             if (mode === 'register') {
-                // successful registration -> inform user and switch to login
                 setError(null);
                 alert('Registre correcte. Ara pots iniciar sessió.');
                 setMode('login');
@@ -48,148 +46,128 @@ export const Login: React.FC<Props> = ({ onLogin }) => {
                 return;
             }
 
-            // successful login
             onLogin(username.trim());
         }).catch(err => {
             console.error(err);
-            setError('No s&#39;ha pogut contactar el servidor');
+            setError('No s\'ha pogut contactar el servidor');
         });
     };
 
     return (
-        <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
+        <div className="lobby-v2" style={{ 
+            display: 'flex', 
+            flexDirection: 'column', 
+            alignItems: 'center', 
             justifyContent: 'center',
-            height: '100vh',
-            background: 'linear-gradient(135deg, #2c3e50 0%, #34495e 50%, #2c3e50 100%)',
-            color: 'white',
-            overflow: 'hidden',
-            boxSizing: 'border-box',
-            fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif"
+            padding: '20px'
         }}>
-            <div style={{
-                textAlign: 'center',
-                marginBottom: '3rem',
-                animation: 'fadeInDown 1s ease'
-            }}>
-                <div style={{ fontSize: '5rem', marginBottom: '1rem' }}>🎮</div>
-                <h1 style={{ 
-                    fontSize: '4rem', 
-                    margin: '0',
-                    background: 'linear-gradient(45deg, #FFD700, #FFA500)',
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                    textShadow: '2px 2px 8px rgba(0,0,0,0.3)',
-                    fontWeight: 'bold'
-                }}>
+            {/* Hero Section */}
+            <div className="hero-content" style={{ textAlign: 'center', marginBottom: '30px', animation: 'fadeInDown 0.6s ease' }}>
+                <div className="gem-spin" style={{ fontSize: '4rem', marginBottom: '10px' }}>
+                    🎮
+                </div>
+                <h1 className="hero-title" style={{ fontSize: '3.5rem', justifyContent: 'center' }}>
                     Who is Who?
                 </h1>
-                <p style={{ 
-                    fontSize: '1.3rem', 
-                    color: '#ecf0f1',
-                    marginTop: '10px'
-                }}>
-                    El joc d'endevinar personatges
+                <p className="hero-sub">
+                    El joc clàssic d'estratègia i deducció
                 </p>
             </div>
-            <form onSubmit={handleSubmit} style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '1.5rem',
-                background: 'linear-gradient(135deg, #3498db 0%, #2980b9 100%)',
-                padding: '3rem',
-                borderRadius: '20px',
-                boxShadow: '0 12px 24px rgba(0,0,0,0.4)',
-                border: '4px solid #FFD700',
-                minWidth: '350px',
-                animation: 'fadeInUp 1s ease'
+
+            {/* Login Card */}
+            <div className="card" style={{ 
+                maxWidth: '450px', 
+                width: '100%', 
+                animation: 'fadeInUp 0.6s ease',
+                border: '1px solid var(--primary-gold-dark)'
             }}>
-                <label style={{ 
-                    fontSize: '1.4rem',
-                    fontWeight: 'bold',
-                    textAlign: 'center',
-                    textShadow: '1px 1px 2px rgba(0,0,0,0.2)'
-                }}>
-                    {mode === 'login' ? '👤 Inicia sessió' : '📝 Registre d\'usuari'}
-                </label>
-                <input 
-                    type="text" 
-                    value={username} 
-                    onChange={(e) => setUsername(e.target.value)} 
-                    style={{
-                        padding: '15px 20px',
-                        fontSize: '1.2rem',
-                        borderRadius: '10px',
-                        border: '3px solid #2c3e50',
-                        width: '100%',
-                        boxSizing: 'border-box',
-                        fontWeight: 'bold',
-                        textAlign: 'center'
-                    }}
-                    placeholder="El teu nom..."
-                    autoFocus
-                />
-                <input
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Contrasenya..."
-                    style={{
-                        padding: '12px 16px',
-                        fontSize: '1.1rem',
-                        borderRadius: '8px',
-                        border: '3px solid #2c3e50',
-                        width: '100%',
-                        boxSizing: 'border-box',
-                        fontWeight: 'bold',
-                        textAlign: 'center'
-                    }}
-                />
-                {error && (
-                    <div style={{ color: '#ffdddd', background: 'rgba(192,57,43,0.9)', padding: '8px', borderRadius: '6px', textAlign: 'center' }}>{error}</div>
-                )}
-                <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', alignItems: 'center' }}>
-                    <button type="button" onClick={() => setMode(mode === 'login' ? 'register' : 'login')} style={{ padding: '8px 10px', borderRadius: '6px', border: '2px solid #1e8449', background: '#ecf0f1', cursor: 'pointer' }}>
-                        {mode === 'login' ? 'Vull registrar-me' : 'Tornar al login'}
-                    </button>
-                    <div style={{ color: '#ecf0f1', fontSize: '0.9rem' }}>
-                        {mode === 'login' ? 'Encara no tens compte?' : 'Ja tens compte?'}
-                    </div>
+                <div className="card-head" style={{ marginBottom: '20px', textAlign: 'center' }}>
+                    <h2 className="card-title">
+                        {mode === 'login' ? 'Benvingut de nou' : 'Crear compte'}
+                    </h2>
+                    <p className="muted">
+                        {mode === 'login' ? 'Introdueix les teves credencials per jugar' : 'Registra\'t per guardar les teves estadístiques'}
+                    </p>
                 </div>
-                <button type="submit" style={{
-                    padding: '15px 30px',
-                    fontSize: '1.3rem',
-                    background: 'linear-gradient(135deg, #27ae60 0%, #229954 100%)',
-                    color: 'white',
-                    border: '3px solid #1e8449',
-                    borderRadius: '10px',
-                    cursor: 'pointer',
-                    fontWeight: 'bold',
-                    boxShadow: '0 6px 12px rgba(0,0,0,0.2)',
-                    transition: 'all 0.2s',
-                    transform: 'scale(1)'
-                }}
-                onMouseEnter={(e) => {
-                    e.currentTarget.style.transform = 'scale(1.05)';
-                    e.currentTarget.style.boxShadow = '0 8px 16px rgba(0,0,0,0.3)';
-                }}
-                onMouseLeave={(e) => {
-                    e.currentTarget.style.transform = 'scale(1)';
-                    e.currentTarget.style.boxShadow = '0 6px 12px rgba(0,0,0,0.2)';
-                }}
-                >
-                    {mode === 'login' ? '🚀 Iniciar sessió' : '✅ Registrar'}
-                </button>
-            </form>
-            <div style={{
-                marginTop: '2rem',
-                color: '#95a5a6',
-                fontSize: '0.9rem',
-                textAlign: 'center'
-            }}>
-                <p>Classica experiència del joc de taula</p>
+
+                <form onSubmit={handleSubmit} className="room-config-form">
+                    <div>
+                        <label className="field-label">Nom d'usuari</label>
+                        <input 
+                            className="input"
+                            type="text" 
+                            value={username} 
+                            onChange={(e) => setUsername(e.target.value)} 
+                            placeholder="El teu nom..."
+                            autoFocus
+                        />
+                    </div>
+
+                    <div>
+                        <label className="field-label">Contrasenya</label>
+                        <input
+                            className="input"
+                            type="password"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            placeholder="••••••••"
+                        />
+                    </div>
+
+                    {error && (
+                        <div style={{ 
+                            color: '#ff6b6b', 
+                            background: 'rgba(192, 57, 43, 0.2)', 
+                            padding: '10px', 
+                            borderRadius: '8px', 
+                            fontSize: '0.9rem',
+                            border: '1px solid rgba(192, 57, 43, 0.4)',
+                            textAlign: 'center'
+                        }}>
+                            ⚠️ {error}
+                        </div>
+                    )}
+
+                    {/* Botons reordenats */}
+                    <div className="form-actions" style={{ flexDirection: 'column', gap: '12px', marginTop: '15px' }}>
+                        
+                        {/* 1. Botó "Crear compte" (petit i a sobre) */}
+                        <div style={{ display: 'flex', justifyContent: 'center' }}>
+                            <button 
+                                type="button" 
+                                className="btn btn-ghost"
+                                onClick={() => {
+                                    setMode(mode === 'login' ? 'register' : 'login');
+                                    setError(null);
+                                }}
+                                style={{ 
+                                    padding: '6px 12px', 
+                                    fontSize: '0.85rem', 
+                                    border: 'none', 
+                                    color: 'var(--ui-subtext)',
+                                    background: 'transparent',
+                                    fontWeight: 'normal',
+                                    textDecoration: 'underline',
+                                    opacity: 0.8
+                                }}
+                                onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
+                                onMouseLeave={(e) => e.currentTarget.style.opacity = '0.8'}
+                            >
+                                {mode === 'login' ? 'Encara no tens compte? Crea\'n un aquí' : 'Ja tens compte? Torna al login'}
+                            </button>
+                        </div>
+
+                        <button type="submit" className="btn btn-primary" style={{ width: '100%', fontSize: '1.1rem', padding: '14px' }}>
+                            {mode === 'login' ? 'Iniciar Sessió' : 'Registrar-se'}
+                        </button>
+
+                    </div>
+                </form>
+            </div>
+            
+            <div className="decor-blobs">
+                <div className="blob b1"></div>
+                <div className="blob b2"></div>
             </div>
         </div>
     );

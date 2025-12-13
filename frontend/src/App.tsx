@@ -7,9 +7,12 @@ import { GameOverModal } from './components/GameOverModal';
 import { GameBoard } from './components/GameBoard';
 import { CharacterCard } from './components/CharacterCard';
 import { Character, GameState, PredefinedQuestion } from './types';
+import { GameLog } from './components/GameLog';
+import { useGameSounds } from './hooks/useGameSounds';
 
 function App() {
   const [username, setUsername] = useState('');
+  const sounds = useGameSounds();
   const [isConnected, setIsConnected] = useState(socket.connected);
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [characters, setCharacters] = useState<Character[]>([]);
@@ -81,6 +84,7 @@ function App() {
     function onGameStarted(room: GameState) {
       setGameState(room);
       setLogs(prev => [...prev, "Partida Començada!"]);
+      sounds.playAlert();
     }
 
     function onReceiveQuestion(data: {question: string, attribute: string, value: any}) {
@@ -90,6 +94,8 @@ function App() {
     function onReceiveAnswer(data: {answer: boolean, attribute: string, value: any, from: string}) {
         const answerText = data.answer ? "SÍ" : "NO";
         setLogs(prev => [...prev, `Resposta: ${answerText}`]);
+        if (data.answer) sounds.playSuccess();
+        else sounds.playError();
     }
 
     function onGameOver(data: {winner: string, reason: string, secretCharacter?: Character | null, secrets?: Record<string, Character | null>}) {
@@ -105,6 +111,11 @@ function App() {
         if ((data as any).secretCharacter) {
             setOpponentSecretCharacter((data as any).secretCharacter || undefined);
         }
+        if (data.winner === socket.id) {
+            sounds.playWin();
+        } else {
+            sounds.playLose();
+        }
     }
 
     function onStatsUpdate(data: {wins: number, losses: number}) {
@@ -115,6 +126,7 @@ function App() {
 
     function onTurnTimeout(data: {playerId: string}) {
         setLogs(prev => [...prev, `⏰ Temps esgotat!`]);
+        sounds.playError();
     }
 
     function onLifeLost(data: {livesRemaining: number}) {
@@ -163,6 +175,7 @@ function App() {
             setTurnPopupExiting(false);
             // after 3s start exit
             const exitTimer = setTimeout(() => setTurnPopupExiting(true), 3000);
+            if (isMine) sounds.playAlert();
             // after exit animation (3000+420ms) hide
             const hideTimer = setTimeout(() => {
                 setTurnPopup({ visible: false, message: '' });
@@ -804,62 +817,31 @@ function App() {
                   </div>
               )}
 
-              {/* Game Log */}
+
+            {/* Game Log*/}
               <div style={{
-                  background: '#1a2838',
-                  padding: '12px',
-                  borderRadius: '10px',
-                  border: '1px solid rgba(255,215,0,0.2)',
-                  flex: showLogs ? 1 : 'auto',
+                  flex: showLogs ? 1 : '0 0 auto',
                   minHeight: 0,
                   display: 'flex',
                   flexDirection: 'column',
-                  maxHeight: showLogs ? '100%' : '40px'
+                  maxHeight: showLogs ? '100%' : '50px',
+                  transition: 'all 0.3s ease',
+                  marginTop: 'auto' // Empeny cap avall
               }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <h4 style={{
-                          color: '#FFD700',
-                          margin: '0',
-                          fontSize: '0.85rem',
-                          fontWeight: 'bold'
-                      }}>
-                          📋 Registre
-                      </h4>
-                      <button onClick={() => setShowLogs(!showLogs)} style={{
-                          background: 'none',
-                          border: 'none',
-                          color: '#FFD700',
-                          cursor: 'pointer',
-                          fontSize: '0.8rem',
-                          fontWeight: 'bold',
-                          padding: '4px 8px'
-                      }}>
-                          {showLogs ? '−' : '+'}
-                      </button>
-                  </div>
-                  <div style={{
-                      flex: 1,
-                      overflowY: 'auto',
-                      fontSize: '0.75rem',
-                      color: '#bdc3c7'
-                  }}>
-                      {logs.length === 0 ? (
-                          <p style={{ color: '#7f8c8d', textAlign: 'center', margin: 0 }}>
-                              -
-                          </p>
-                      ) : (
-                          logs.slice(-15).map((l, i) => (
-                              <div key={i} style={{
-                                  padding: '4px 0',
-                                  borderBottom: '1px solid rgba(255,255,255,0.05)',
-                                  lineHeight: '1.3'
-                              }}>
-                                  {l}
-                              </div>
-                          ))
-                      )}
-                  </div>
+                   {showLogs ? (
+                       <GameLog logs={logs} />
+                   ) : (
+                       <button 
+                           onClick={() => setShowLogs(true)}
+                           className="btn btn-ghost"
+                           style={{ width: '100%', padding: '8px', fontSize: '0.8rem' }}
+                       >
+                           📜 Mostrar Registre ({logs.length})
+                       </button>
+                   )}
               </div>
+
+              
           </div>
 
           {/* Center - Game Board */}

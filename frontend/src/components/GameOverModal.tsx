@@ -1,5 +1,6 @@
 import React from 'react';
 import { Character } from '../types';
+import { CharacterCard } from './CharacterCard'; // Assegura't d'importar-ho si vols mostrar la carta bonica
 
 interface Props {
   winner: string;
@@ -11,86 +12,126 @@ interface Props {
 
 export const GameOverModal: React.FC<Props> = ({ winner, isMe, reason, onRestart, secretCharacter }) => {
   return (
-    <div className="gameover-overlay">
-      <div className={`gameover-card ${isMe ? 'gameover--win' : 'gameover--lose'}`} role="dialog" aria-modal="true">
-        <div className="gameover-header">
-          <div className="gameover-icon" aria-hidden>
-            {isMe ? '🏆' : '😢'}
+    <div className="modal-overlay" style={{ backdropFilter: 'blur(10px)', zIndex: 2000 }}>
+      <div className={`card ${isMe ? 'is-win' : 'is-lose'}`} style={{
+        maxWidth: '500px',
+        width: '100%',
+        textAlign: 'center',
+        padding: '32px',
+        animation: 'modalZoomIn 0.5s cubic-bezier(0.16, 1, 0.3, 1)',
+        border: isMe ? '2px solid var(--success-green)' : '2px solid var(--danger-red)',
+        boxShadow: isMe 
+            ? '0 0 60px rgba(39, 174, 96, 0.25)' 
+            : '0 0 60px rgba(192, 57, 43, 0.25)',
+        position: 'relative',
+        overflow: 'hidden'
+      }}>
+        
+        {/* Confetti només si guanyes */}
+        {isMe && (
+          <div className="confetti-container">
+            {Array.from({ length: 20 }).map((_, i) => (
+               <span key={i} className={`confetti-piece p${i % 5}`} style={{ left: `${Math.random() * 100}%`, animationDelay: `${Math.random() * 2}s` }}></span>
+            ))}
           </div>
-          <h2 className="gameover-title">{isMe ? 'HAS GUANYAT!' : 'HAS PERDUT'}</h2>
+        )}
+
+        <div className="gameover-header" style={{ marginBottom: '24px' }}>
+          <div style={{ 
+            fontSize: '5rem', 
+            marginBottom: '10px',
+            animation: isMe ? 'bounce 2s infinite' : 'pulse 3s infinite',
+            filter: isMe ? 'drop-shadow(0 0 20px rgba(255,215,0,0.5))' : 'grayscale(0.8)'
+          }}>
+            {isMe ? '🏆' : '💀'}
+          </div>
+          
+          <h2 style={{ 
+            fontSize: '2.8rem', 
+            margin: 0, 
+            fontWeight: 900,
+            background: isMe 
+                ? 'linear-gradient(135deg, #FFD700 0%, #FDB931 100%)' 
+                : 'linear-gradient(135deg, #e74c3c 0%, #c0392b 100%)',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            textTransform: 'uppercase',
+            letterSpacing: '1px'
+          }}>
+            {isMe ? 'VICTÒRIA!' : 'DERROTA'}
+          </h2>
+          <p style={{ color: 'var(--ui-subtext)', fontSize: '1.1rem', marginTop: '8px' }}>
+            {reason}
+          </p>
         </div>
 
-        <div className="gameover-body">
-          <p className="gameover-reason">{reason}</p>
-          {secretCharacter && (
-            <p className="gameover-secret">🕵️ Carta secreta del rival: <strong className="gameover-winner-name">{secretCharacter.name}</strong></p>
-          )}
-          <p className="gameover-winner">🏅 Guanyador: <strong className="gameover-winner-name">{winner}</strong></p>
+        <div className="gameover-content" style={{ 
+            background: 'rgba(0,0,0,0.2)', 
+            borderRadius: '12px', 
+            padding: '20px', 
+            marginBottom: '24px',
+            border: '1px solid rgba(255,255,255,0.05)'
+        }}>
+            {/* Si tenim el personatge secret del rival, el mostrem */}
+            {secretCharacter ? (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+                    <span style={{ fontSize: '0.9rem', color: 'var(--ui-subtext)', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 'bold' }}>
+                        El personatge secret del rival era:
+                    </span>
+                    {/* Reutilitzem la CharacterCard en mode compacte però sense opacitat */}
+                    <div style={{ transform: 'scale(1.1)', margin: '10px 0' }}>
+                         <CharacterCard 
+                            character={secretCharacter} 
+                            eliminated={false} 
+                            onClick={() => {}} 
+                            compact={true} 
+                        />
+                    </div>
+                    <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: 'var(--primary-gold)' }}>
+                        {secretCharacter.name}
+                    </div>
+                </div>
+            ) : (
+                <div style={{ fontSize: '1.2rem' }}>
+                     Guanyador: <strong style={{ color: 'var(--primary-gold)' }}>{winner}</strong>
+                </div>
+            )}
         </div>
 
-        <div className="gameover-cta">
-          <button className="btn btn-ghost" onClick={onRestart}>Tornar al Menú</button>
-        </div>
-
-        <div className="confetti">
-          {Array.from({ length: 12 }).map((_, i) => <span key={i} className={`confetti-piece p${i % 6}`}></span>)}
+        <div className="gameover-actions">
+          <button 
+            className="btn btn-primary" 
+            onClick={onRestart}
+            style={{ 
+                width: '100%', 
+                padding: '16px', 
+                fontSize: '1.1rem',
+                boxShadow: isMe ? '0 10px 30px rgba(255, 215, 0, 0.3)' : 'none'
+            }}
+          >
+            {isMe ? 'Jugar una altra vegada' : 'Tornar-ho a intentar'}
+          </button>
         </div>
       </div>
 
       <style>{`
-        .gameover-overlay {
-          position: fixed; inset: 0; display:flex; align-items:center; justify-content:center;
-          background: linear-gradient(180deg, rgba(0,0,0,0.65), rgba(0,0,0,0.85));
-          backdrop-filter: blur(5px); z-index: 2000; padding: 24px;
+        .confetti-container { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 0; }
+        .confetti-piece {
+            position: absolute;
+            width: 10px; height: 16px;
+            top: -20px;
+            opacity: 0;
+            animation: fall 3s linear infinite;
         }
-        .gameover-card {
-          position: relative; width: 720px; max-width: 100%; border-radius: 16px; padding: 28px;
-          box-shadow: 0 30px 80px rgba(0,0,0,0.6); border: 4px solid rgba(255,215,0,0.12);
-          background: linear-gradient(135deg, rgba(10,18,32,0.95), rgba(20,32,56,0.95));
-          color: #fff; text-align:center; overflow:hidden;
-        }
-        .gameover--win { border-color: rgba(39,174,96,0.25); }
-        .gameover--lose { border-color: rgba(192,57,43,0.18); }
-        .gameover-header { display:flex; flex-direction:column; gap:8px; align-items:center; }
-        .gameover-icon { font-size: 5.5rem; animation: iconBounce 1s ease infinite; }
-        .gameover-title { font-size: 2.4rem; margin: 0; font-weight:900; text-transform:uppercase; letter-spacing:1px; }
-        .gameover-body { margin-top: 10px; }
-        .gameover-reason { background: rgba(255,255,255,0.04); padding: 12px 16px; border-radius: 10px; color: #f3f6f9; font-size:1.05rem; }
-        .gameover-winner { margin-top: 16px; font-size: 1.1rem; }
-        .gameover-winner-name { color: #FFD700; }
-        .gameover-cta { display:flex; gap:12px; justify-content:center; margin-top:20px; }
-        .btn { padding: 12px 22px; border-radius: 10px; font-weight:800; cursor:pointer; border:0; }
-        .btn-primary { background: linear-gradient(135deg, #2ecc71, #27ae60); color: #042017; box-shadow: 0 8px 20px rgba(39,174,96,0.18); }
-        .btn-ghost { background: transparent; color: #fff; border: 2px solid rgba(255,255,255,0.08); }
+        .p0 { background: var(--primary-gold); left: 10%; }
+        .p1 { background: var(--board-blue); left: 30%; }
+        .p2 { background: var(--danger-red); left: 50%; }
+        .p3 { background: var(--success-green); left: 70%; }
+        .p4 { background: #9b59b6; left: 90%; }
 
-        .confetti { position:absolute; inset:0; pointer-events:none; }
-        .confetti-piece { position:absolute; width:10px; height:18px; border-radius:2px; opacity:0.95; transform-origin:center; animation: confettiFall 1600ms linear infinite; }
-        .confetti-piece.p0 { left: 8%; top:-10%; background:#f1c40f; animation-delay:0ms; }
-        .confetti-piece.p1 { left: 18%; top:-10%; background:#e67e22; animation-delay:120ms; }
-        .confetti-piece.p2 { left: 28%; top:-10%; background:#e74c3c; animation-delay:240ms; }
-        .confetti-piece.p3 { left: 38%; top:-10%; background:#9b59b6; animation-delay:360ms; }
-        .confetti-piece.p4 { left: 52%; top:-10%; background:#3498db; animation-delay:480ms; }
-        .confetti-piece.p5 { left: 66%; top:-10%; background:#2ecc71; animation-delay:600ms; }
-        .confetti-piece.p6 { left: 74%; top:-10%; background:#f39c12; animation-delay:720ms; }
-        .confetti-piece.p7 { left: 84%; top:-10%; background:#16a085; animation-delay:840ms; }
-        .confetti-piece.p8 { left: 92%; top:-10%; background:#c0392b; animation-delay:960ms; }
-        .confetti-piece.p9 { left: 45%; top:-10%; background:#8e44ad; animation-delay:1080ms; }
-        .confetti-piece.p10 { left: 60%; top:-10%; background:#f1c40f; animation-delay:1200ms; }
-        .confetti-piece.p11 { left: 30%; top:-10%; background:#2980b9; animation-delay:1320ms; }
-
-        @keyframes confettiFall {
-          0% { transform: translateY(-10vh) rotate(0deg) scale(1); opacity:1; }
-          70% { opacity:1; }
-          100% { transform: translateY(70vh) rotate(360deg) scale(0.9); opacity:0; }
-        }
-        @keyframes iconBounce { 0%,100%{ transform:translateY(0);} 50%{ transform:translateY(-16px);} }
-
-        @media (max-width: 640px) {
-          .gameover-card { width: 100%; padding: 18px; }
-          .gameover-icon { font-size: 4rem; }
-          .gameover-title { font-size: 1.6rem; }
-          .gameover-cta { flex-direction:column; }
-          .btn { width: 100%; }
+        @keyframes fall {
+            0% { transform: translateY(0) rotate(0deg); opacity: 1; }
+            100% { transform: translateY(600px) rotate(720deg); opacity: 0; }
         }
       `}</style>
     </div>
