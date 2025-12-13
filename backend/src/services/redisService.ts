@@ -1,8 +1,9 @@
 import { createClient } from "redis";
 import { GameState, Player, GameConfig } from "../types";
 
+const redisUrl = process.env.REDIS_URL || (process.env.REDIS_HOST ? `redis://${process.env.REDIS_HOST}:${process.env.REDIS_PORT || 6379}` : "redis://localhost:6379");
 const client = createClient({
-  url: process.env.REDIS_URL || "redis://localhost:6379",
+  url: redisUrl,
 });
 
 client.on("error", (err) => console.log("Redis Client Error", err));

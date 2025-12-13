@@ -211,114 +211,119 @@ io.on('connection', (socket: Socket) => {
   });
 
   socket.on('join_room', async ({ roomId, username, config }: { roomId: string, username: string, config?: any }) => {
-    console.log(`[DEBUG] join_room request: roomId=${roomId}, username=${username}, config=${JSON.stringify(config)}`);
-    let room = await getRoom(roomId);
-    if (!room) {
-      console.log(`[DEBUG] Room ${roomId} not found, creating new room...`);
-      room = await createRoom(roomId, config);
-      console.log(`[DEBUG] Room created:`, room);
-    } else if (config && !room.config) {
-      // Attach config if it was missing
-      console.log(`[DEBUG] Updating room config for ${roomId}`);
-      room.config = config;
-      await updateRoom(roomId, room);
-    } else {
-      console.log(`[DEBUG] Room found:`, room);
-    }
-
-    if (room.players.length >= 2) {
-      // Check if player is already in room (reconnection)
-      const existingPlayer = room.players.find(p => p.id === socket.id);
-      if (!existingPlayer) {
-        socket.emit('error', 'La sala està plena');
-        return;
-      }
-    } else {
-      // Check if player is already in room to avoid duplicates on re-joins
-      const existingPlayer = room.players.find(p => p.id === socket.id);
-      if (!existingPlayer) {
-        const newPlayer = {
-          id: socket.id,
-          name: username,
-          lives: room.config?.mode === 'lives' ? 2 : undefined
-        };
-        const updatedRoom = await addPlayerToRoom(roomId, newPlayer);
-        if (updatedRoom) {
-          room = updatedRoom;
-          console.log(`[DEBUG] Player added to room ${roomId}. New state:`, room);
-        } else {
-          console.error(`[DEBUG] Failed to add player to room ${roomId}`);
-        }
-      }
-    }
-
-    socket.join(roomId);
-    playerRooms.set(socket.id, roomId);
-    io.to(roomId).emit('room_update', room);
-    // Send current stats to players who are connected
     try {
-      for (const p of room.players) {
-        if (p.name) {
-          const s = await getStats(p.name);
-          io.to(p.id).emit('stats_update', s);
+      console.log(`[DEBUG] join_room request: roomId=${roomId}, username=${username}, config=${JSON.stringify(config)}`);
+      let room = await getRoom(roomId);
+      if (!room) {
+        console.log(`[DEBUG] Room ${roomId} not found, creating new room...`);
+        room = await createRoom(roomId, config);
+        console.log(`[DEBUG] Room created:`, room);
+      } else if (config && !room.config) {
+        // Attach config if it was missing
+        console.log(`[DEBUG] Updating room config for ${roomId}`);
+        room.config = config;
+        await updateRoom(roomId, room);
+      } else {
+        console.log(`[DEBUG] Room found:`, room);
+      }
+
+      if (room.players.length >= 2) {
+        // Check if player is already in room (reconnection)
+        const existingPlayer = room.players.find(p => p.id === socket.id);
+        if (!existingPlayer) {
+          socket.emit('error', 'La sala està plena');
+          return;
+        }
+      } else {
+        // Check if player is already in room to avoid duplicates on re-joins
+        const existingPlayer = room.players.find(p => p.id === socket.id);
+        if (!existingPlayer) {
+          const newPlayer = {
+            id: socket.id,
+            name: username,
+            lives: room.config?.mode === 'lives' ? 2 : undefined
+          };
+          const updatedRoom = await addPlayerToRoom(roomId, newPlayer);
+          if (updatedRoom) {
+            room = updatedRoom;
+            console.log(`[DEBUG] Player added to room ${roomId}. New state:`, room);
+          } else {
+            console.error(`[DEBUG] Failed to add player to room ${roomId}`);
+          }
         }
       }
-    } catch (e) {
-      console.error('Error sending stats on join:', e);
-    }
 
-    // CRITICAL FIX: Re-emit secret character if game is playing (Host might have missed the start event)
-    if (room.status === 'playing') {
+      socket.join(roomId);
+      playerRooms.set(socket.id, roomId);
+      io.to(roomId).emit('room_update', room);
+      // Send current stats to players who are connected
       try {
-        const secretId = await getSecretCharacter(roomId, socket.id);
-        if (secretId) {
-          const char = characters.find(c => c.id === secretId);
-          if (char) {
-            socket.emit('secret_character', char);
-            // Also ensure they know the game is started/playing effectively
-            socket.emit('game_started', room);
+        for (const p of room.players) {
+          if (p.name) {
+            const s = await getStats(p.name);
+            io.to(p.id).emit('stats_update', s);
           }
         }
       } catch (e) {
-        console.error('Error re-syncing secret character:', e);
-      }
-    }
-
-    // Broadcast updated room list to everyone in lobby
-    const availableRooms = await getAvailableRooms();
-    io.emit('rooms_list', availableRooms);
-
-    if (room && room.players.length === 2 && room.status === 'waiting') {
-      // Start Game
-      room.status = 'playing';
-      room.turn = room.players[0].id; // Player 1 starts
-      room.turnStartTime = Date.now();
-      room.turnTimeLimit = room.config?.turnTime || TURN_TIME_LIMIT;
-
-      // Initialize lives for 'lives' mode
-      if (room.config?.mode === 'lives') {
-        room.players.forEach(p => {
-          if (p.lives === undefined) p.lives = 2;
-        });
+        console.error('Error sending stats on join:', e);
       }
 
-      // Assign secret characters
-      const char1 = characters[Math.floor(Math.random() * characters.length)];
-      let char2 = characters[Math.floor(Math.random() * characters.length)];
-      while (char1.id === char2.id) {
-        char2 = characters[Math.floor(Math.random() * characters.length)];
+      // CRITICAL FIX: Re-emit secret character if game is playing (Host might have missed the start event)
+      if (room.status === 'playing') {
+        try {
+          const secretId = await getSecretCharacter(roomId, socket.id);
+          if (secretId) {
+            const char = characters.find(c => c.id === secretId);
+            if (char) {
+              socket.emit('secret_character', char);
+              // Also ensure they know the game is started/playing effectively
+              socket.emit('game_started', room);
+            }
+          }
+        } catch (e) {
+          console.error('Error re-syncing secret character:', e);
+        }
       }
 
-      await setSecretCharacter(roomId, room.players[0].id, char1.id);
-      await setSecretCharacter(roomId, room.players[1].id, char2.id);
-      await updateRoom(roomId, room);
+      // Broadcast updated room list to everyone in lobby
+      const availableRooms = await getAvailableRooms();
+      io.emit('rooms_list', availableRooms);
 
-      io.to(room.players[0].id).emit('secret_character', char1);
-      io.to(room.players[1].id).emit('secret_character', char2);
-      io.to(roomId).emit('game_started', room);
+      if (room && room.players.length === 2 && room.status === 'waiting') {
+        // Start Game
+        room.status = 'playing';
+        room.turn = room.players[0].id; // Player 1 starts
+        room.turnStartTime = Date.now();
+        room.turnTimeLimit = room.config?.turnTime || TURN_TIME_LIMIT;
 
-      // Start turn timer
-      startTurnTimer(roomId, room.players[0].id);
+        // Initialize lives for 'lives' mode
+        if (room.config?.mode === 'lives') {
+          room.players.forEach(p => {
+            if (p.lives === undefined) p.lives = 2;
+          });
+        }
+
+        // Assign secret characters
+        const char1 = characters[Math.floor(Math.random() * characters.length)];
+        let char2 = characters[Math.floor(Math.random() * characters.length)];
+        while (char1.id === char2.id) {
+          char2 = characters[Math.floor(Math.random() * characters.length)];
+        }
+
+        await setSecretCharacter(roomId, room.players[0].id, char1.id);
+        await setSecretCharacter(roomId, room.players[1].id, char2.id);
+        await updateRoom(roomId, room);
+
+        io.to(room.players[0].id).emit('secret_character', char1);
+        io.to(room.players[1].id).emit('secret_character', char2);
+        io.to(roomId).emit('game_started', room);
+
+        // Start turn timer
+        startTurnTimer(roomId, room.players[0].id);
+      }
+    } catch (err) {
+      console.error('[ERROR] join_room failed:', err);
+      socket.emit('error', 'Error joining room: ' + (err as Error).message);
     }
   });
 
